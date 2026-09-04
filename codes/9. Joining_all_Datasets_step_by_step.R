@@ -1,0 +1,251 @@
+
+# Note Madelaine found that something has gone wromng by the joining here! We need to go trough each step carefully to see what is happening!
+library(tidyverse)  # for data manipulation and visualization
+library(readxl)     # for reading Excel files)
+library(dplyr)
+
+#Dataset from Kobotoolbox
+# Importing the Demographic_cleaned_data
+Kobo <- readRDS("data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.rds")
+
+#Kobo<-Demographic_cleaned_data
+
+Kobo$INIKA_ID <- as.character(Kobo$INIKA_ID)
+
+
+#Dataset from labdata_Note now we have managed to correct the Isolate_IDs in the 1.Cleaning_LabData_Original
+
+# Import the Cleaned_Labdata_Original
+Labdata <- readRDS("data/CLEANED_DATA/1_Cleaned_Labdata_Original-2025-10-07.rds")%>% 
+  filter(!INIKA_ID == "21267")
+
+#Labdata<-Cleaned_Labdata_Original%>%
+ # filter(!INIKA_ID == "21267")
+ 
+# Change to character from the INIKA_ID to Numeric in Labdata for compatible joining with Kobo data. By MMJ 21-10_2025
+Labdata$INIKA_ID <- as.character(Labdata$INIKA_ID)
+
+#join Kobo Labdata
+
+joined_data <- Kobo %>%
+  left_join(Labdata, by = "INIKA_ID")
+# %>% 
+#   mutate(Isolate_ID = case_when(Isolate_ID == "23308_1_R" ~ "23308_3_R",
+#                                 Isolate_ID == "23308_2_R" ~ "23308_1_R", 
+#                                 TRUE  ~  Isolate_ID)) 
+#   
+# Checked all have been joined
+Checknotjoined<-anti_join(Labdata,Kobo, by="INIKA_ID")
+# 0 observations
+
+# Importing the selection file
+Selection <- readRDS("data/CLEANED_DATA/Selection-2025-10-07.rds")
+
+# Join the joined_data with the Selection by using Isolate_ID
+joined_data <- joined_data%>%
+  left_join(Selection, by = "Isolate_ID")
+# Checked all have been joined
+Checknotjoined<-anti_join(Selection,joined_data, by="Isolate_ID")
+# 0 observations
+
+# joining with WHONETdata from 4. Cleaning_WHONET_Data
+# Importing the WHONET_Cleaned_data
+WHONETdata <- readRDS("data/CLEANED_DATA/4_WHONET_Cleaned_data-2025-10-08.rds")
+
+# Join the joined_data with WHONETdata by using Isolate_ID
+
+joined_data <- joined_data %>%
+  left_join(WHONET_Cleaned_data, by = "Isolate_ID")
+# NOte this is the previous code below as it wasdepending on importing the dataset 
+#joined_data <- joined_data %>%
+#  left_join(WHONETdata, by = "Isolate_ID")
+
+Checknotjoined<-anti_join(WHONET_Cleaned_data,joined_data, by="Isolate_ID")
+
+
+# Importing the MALDITOF_RESULTS_cleaned_data
+MALDITOF_RESULTS_cleaned_data <- read.csv("data/CLEANED_DATA/MALDITOF_RESULTS_cleaned_data.csv")
+
+# Join joined_data with MALDITOF_RESULTS_cleaned_data by Isolate_ID
+joined_data <- joined_data %>%
+left_join(MALDITOF_RESULTS_cleaned_data, by = "Isolate_ID")%>% 
+  distinct()
+
+## Select the true ESBL # MMJ added this 
+joined_data <- joined_data %>%
+  mutate(
+    ESBL = if_else(ESBL_Selection >= 5, 1, 0, missing = 0)
+  ) 
+
+Checknotjoined<-anti_join(joined_data,MALDITOF_RESULTS_cleaned_data, by = "Isolate_ID")
+
+
+#Checking the rows where matching has occurred several times
+# Check1<-joined_data[193,] 
+# Check2<-joined_data[146,] 
+
+# 25.10.25 I think we have a finaldataset to work further on from here!
+#We could filter ( content from different columns ) and select those variables needed for the specific analyses, but also to have an additional check that all is ok!
+
+# joined_data <- joined_data%>% 
+#   mutate(Isolate_ID = case_when(Isolate_ID == "23308_1_R" ~ "23308_3_R",
+#                                 Isolate_ID == "23308_2_R" ~ "23308_1_R", 
+#                                 TRUE  ~  Isolate_ID)) 
+# Save the file
+write.csv(joined_data,"data/CLEANED_DATA/joined_data.csv")
+
+# Importing the joined_data
+joined_data <- read.csv("data/CLEANED_DATA/joined_data.csv")
+# Descriptive_LabStyphi<-joined_data%>%
+#   filter(Isolate.x == "S.typhimurium")
+# Descriptive_LabECO1<-joined_data%>%
+#   filter(Isolate.x == "E.coli")
+# Descriptive_LabKpn1<-joined_data%>%
+#   filter(Isolate.x == "K.pneumoniae")
+
+Confirmed_by_TVLA<-joined_data%>%
+  filter(!is.na(TVLA_ID)) # 397 observations
+###############################################################################
+# we detected a duplication of Isolate_ID in the MALDITOF_RESULTS_cleaned_data and we need to remove 
+# We also detected that the ISOLATE_ID that was 125_1_D was duplicated, however the TVLA had misspelled the one of the IDs 
+# and we remove the one where it was not identification; NOTE In the datasets for comparison MN detected that 13122_1_D , 11301_1_R and 2374_1_D needs to be excluded! Wrong numbers!
+#MALDITOF_RESULTS_cleaned_data<-unique(MALDITOF_RESULTS_cleaned_data)%>%
+ # filter(!TVLA_ID %in% c("125-1-D", '23370-1-R','23308-2'),
+      #   !(VITEK_MS_Results == "Enterobacter asburiae  and Enterobacter cloacae" & TVLA_ID == "21228-1-R"),
+       #  !(VITEK_MS_Results == "Citrobacter Werkmanii" & TVLA_ID == "23248-2-R"),
+        #  !(VITEK_MS_Results == "No Identification" & TVLA_ID == "23224-1-R"),
+        # !(VITEK_MS_Results == "Citrobacter freundii" & TVLA_ID == "13235-1-R"),
+        # !(VITEK_MS_Results == "Enterobacter cloacae and Enterobacter asburiae" & TVLA_ID == "23372-1-R"),
+        #
+         #  )
+
+
+#Check<-MALDITOF_RESULTS_cleaned_data%>%
+ # filter(TVLA_ID=="23372-1-R")
+
+# Below we don't get the all the isolates to join, tried to use TVLA_ID for the 10 that did not join but then the INIKA_ID was not there for all
+  
+# joined_data <-left_join(MALDITOF_RESULTS_cleaned_data,joined_data, by = "Isolate_ID")
+# NOT<- anti_join(MALDITOF_RESULTS_cleaned_data,joined_data, by = "Isolate_ID")
+# 2395_2_D was not selected, has to be excluded, # 23308_2_R should be changed
+#Joined_data_2<-left_join(NOT,joined_data, by = "TVLA_ID")
+
+#NOT<- anti_join(NOT,Joined_data_2, by = "TVLA_ID")
+
+names(joined_data)
+
+# Not when not writing out I have not got the step where the names have been changed, so either do this here again or see where this is performed...
+
+# "COLONY MORPHOLOGY ON C3GR.x"                                                                     
+#[340] "COLONY MORPHOLOGY ON CARBA.x"                                                                    
+#[431] "COLONY MORPHOLOGY ON XLD.x"                                                                      
+#[42] "COLONY MORPHOLOGY ON BGA.x"                                                                      
+#[43] "TSI Media_Slope.x"                                                                               
+#[44] "TSI Media_Butt.x"                                                                                
+#[45] "TSI Media_Gas.x"                                                                                 
+#[46] "TSIMedia_H2S.x"                                                                                  
+#[47] "SIM Media_H2S.x"                                                                                 
+#[48] "SIM Media Indole.x"                                                                              
+#[49] "SIM Media Motility.x"
+
+Maulid_joined_almost_all<-joined_data%>%
+  rename(COLONY.MORPHOLOGY.ON.C3GR =`COLONY MORPHOLOGY ON C3GR.x`)
+select(INIKA_ID.x, Isolate_ID, TVLA_ID, Isolate.x, VITEK_MS_Results,REGION.x,
+         DISTRICT.x,SEASON.x, ORIGIN_OF_SAMPLE.x,`COLONY.MORPHOLOGY.ON.C3GR.x`, `COLONY.MORPHOLOGY.ON.CARBA.x`, 
+         `COLONY.MORPHOLOGY.ON.XLD.y`, `COLONY.MORPHOLOGY.ON.BGA.y`, CITRATE.y, `TSI.Media_Slope.x`, `TSI.Media_Butt.x`, 
+         `TSI.Media_Gas.y`, TSIMedia_H2S.y, `SIM.Media_H2S.x`, `SIM.Media.Indole.x`,`SIM.Media.Motility.x`,
+         UREASE.y)
+names(Maulid_joined_almost_all)
+# Save the file
+write.csv(Maulid_joined_almost_all, "data/CLEANED_DATA/Maulid_joined_almost_all.csv")
+
+# We need to see first the results for all the different Biochemical tests for the Isolate obtained originally
+# Descriptive_Lab<-Maulid_joined_almost_all%>%
+#   filter(Isolate.x == "S.typhimurium")
+# Descriptive_LabECO<-Maulid_joined_almost_all%>%
+#   filter(Isolate.x == "E.coli")
+# Descriptive_LabKpn<-Maulid_joined_almost_all%>%
+#   filter(Isolate.x == "K.pneumoniae")
+
+long_data <- Maulid_joined_almost_all %>%
+  pivot_longer(
+    cols = c(
+      `COLONY.MORPHOLOGY.ON.C3GR.y`,
+      `COLONY.MORPHOLOGY.ON.CARBA.y`, 
+      `COLONY.MORPHOLOGY.ON.XLD.y`, 
+      `COLONY.MORPHOLOGY.ON.BGA.y`, 
+      CITRATE.y, `TSI.Media_Slope.y`, 
+      `TSI.Media_Butt.y`, 
+      `TSI.Media_Gas.y`, TSIMedia_H2S.y, 
+      `SIM.Media_H2S.y`, `SIM.Media.Indole.y`,
+      `SIM.Media.Motility.y`,
+      UREASE.y
+    ),
+    names_to = "Method",
+    values_to = "Content"
+  )
+
+grouped_summary <- long_data %>%
+  group_by(Isolate.x, VITEK_MS_Results.x, Method, Content) %>%
+  summarise(Frequency = n(), .groups = "drop") %>%
+  arrange(Isolate.x, Method)
+
+
+
+# We filter out the columns where Biochemical and TVLA results are the same
+ECO_correct_Identified<-grouped_summary%>%
+  filter(Isolate.x =="E.coli", VITEK_MS_Results.x =="Escherichia coli") ## 130 observation
+
+## Save the file_ Maulid needs toi complete. 
+write_tsv(ECO_correct_Identified,"data/CLEANED_DATA/ECO_correct_Identified.tsv")
+
+saveRDS(ECO_correct_Identified,"data/CLEANED_DATA/ECO_correct_Identified.rds")
+
+ECO_NOT_correct_Identified_Bio<-grouped_summary%>%
+  filter(Isolate.x =="E.coli", VITEK_MS_Results!="Escherichia coli") 
+
+write_tsv(ECO_NOT_correct_Identified_Bio,"data/CLEANED_DATA/ECO_NOT_correct_Identified_Bio.tsv")
+
+saveRDS(ECO_correct_Identified,"data/CLEANED_DATA/ECO_NOT_correct_Identified_Bio.rds")
+
+ECO_NOT_correct_Identified_VITEK<-grouped_summary%>%
+  filter(Isolate.x !="E.coli", VITEK_MS_Results =="Escherichia coli") 
+
+write_tsv(ECO_NOT_correct_Identified_VITEK,"data/CLEANED_DATA/ECO_NOT_correct_Identified_VITEK.tsv")
+
+saveRDS(ECO_NOT_correct_Identified_VITEK,"data/CLEANED_DATA/ECO_NOT_correct_Identified_VITEK.rds")
+# X in agreement
+
+Kleb_correct_Identified<-grouped_summary%>%
+  filter(Isolate.x =="K.pneumoniae", VITEK_MS_Results =="Klebsiella pneumoniae") # 52 observation
+
+## Save the file_ Maulid needs to complete. 
+write_tsv(Kleb_correct_Identified,"data/CLEANED_DATA/Kleb_correct_Identified.tsv")
+
+saveRDS(Kleb_correct_Identified,"data/CLEANED_DATA/Kleb_correct_Identified.rds") 
+
+Kleb_NOT_correct_Identified_Bio<-grouped_summary%>%
+  filter(Isolate.x =="K.pneumoniae", VITEK_MS_Results!="Klebsiella pneumoniae")
+
+write_tsv(Kleb_NOT_correct_Identified_Bio,"data/CLEANED_DATA/Kleb_NOT_correct_Identified_Bio.tsv")
+
+saveRDS(Kleb_NOT_correct_Identified_Bio,"data/CLEANED_DATA/Kleb_NOT_correct_Identified_Bio.rds")
+
+Kleb_NOT_correct_Identified_VITEK<-grouped_summary%>%
+  filter(Isolate.x !="K.pneumoniae", VITEK_MS_Results=="Klebsiella pneumoniae") # 13 observation
+
+write_tsv(Kleb_NOT_correct_Identified_VITEK,"data/CLEANED_DATA/Kleb_NOT_correct_Identified_VITEK.tsv")
+
+saveRDS(Kleb_NOT_correct_Identified_VITEK,"data/CLEANED_DATA/Kleb_NOT_correct_Identified_VITEK.rds")
+
+#Write out all the tables correct and not correct
+
+
+# From the total joined dataset _ we need to check how many Isolates you have per category
+
+
+# Now we have to join with NVI_data as well
+
+#Check<-joined_data[2503,] 
+#Check<-joined_data[193,] 
+################################################################################

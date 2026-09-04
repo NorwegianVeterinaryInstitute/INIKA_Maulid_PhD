@@ -1,0 +1,876 @@
+---
+title: "Cleaning_all_original_datasets_New.rmd"
+author: "Madelaine Norström"
+date: "2026-03-16"
+output: html_document
+params:
+  script_name: codes/Cleaning_all_original_datasets.Rmd
+  vitek_ast_data: data/MALDITOF_RESULTS.xlsx
+  biochemical_data: data/DRY_RAINY_MWZ_KILIMANJARO.xlsx
+  whonet: data/WHONET DATA_9_9_2025.xlsx
+  selection_file: data/DRY_RAINY_MWZ_KILIMANJARO.xlsx
+  selection_sheet: DRY_RAINY_MWZ_KILIMANJARO_AST2
+  kobo: "data/KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_-_2025-06-12-18-24-20.xlsx"
+  NVI: "data/MALDITOF_NVI 25feb2026.xlsx"
+---
+
+
+```{r}
+params
+```
+
+```{r setup}
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+library(tidyverse)
+library(readxl)
+library(kableExtra)
+library(here)
+
+# Anchor the project root
+here::i_am(params$script_name)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+## Importing the original lab data
+DRY_RAINY_MWZ_KILIMANJARO <- read_excel("data/DRY_RAINY_MWZ_KILIMANJARO.xlsx",
+                                        na = c("", "NA")
+                                        )
+# glimpse(DRY_RAINY_MWZ_KILIMANJARO)
+# str(DRY_RAINY_MWZ_KILIMANJARO)
+# names(DRY_RAINY_MWZ_KILIMANJARO)
+## Part1: Data cleaning
+# Selecting relevant columns
+Cleaned_Labdata_Original <- 
+  DRY_RAINY_MWZ_KILIMANJARO %>%
+  select(-`S/No`, -`SAMPLE TYPE`,
+         -`Season Included in Number? ( evt. how?)`,-Comment_)%>%
+## Replacing the NIKA_ with INIKA_ and INIKA_ to " " in INIKA_ID column
+  mutate(INIKA_ID = str_replace_all(INIKA_ID, "(NIKA_)|(INIKA_)", ""))
+
+Cleaned_Labdata_Original<-Cleaned_Labdata_Original%>%
+  mutate(
+    # Extract first part of INIKA_ID
+    INIKA_prefix = str_extract(INIKA_ID, "^[^_]+"),
+    
+    # Remove first part of Isolate_ID
+    Isolate_suffix = str_replace(Freezing_ID_No, "^[^_]+_", ""),
+    
+    # Combine to make corrected ID
+    Isolate_ID = paste0(INIKA_prefix, "_", Isolate_suffix)
+  )
+
+## Renaming the columns
+# Cleaned_Labdata_Original <- 
+# Cleaned_Labdata_Original %>%
+ #rename(Isolate_ID = Isolate_ID_Corrected) 
+
+# Freezing_IDS still not corrected, needs to be kept, as TVLA has used them!
+Cleaned_Labdata_Original %>%
+  mutate_if(is.character, factor) #%>%
+  #lapply(levels)
+
+## Re labeling the data in the columns
+# List the columns to be modified
+
+cols_to_relabel <- c(
+  "COLONY MORPHOLOGY ON C3GR", 
+  "COLONY MORPHOLOGY ON CARBA", 
+  "COLONY MORPHOLOGY ON XLD", 
+  "COLONY MORPHOLOGY ON BGA"
+) 
+
+# Apply the replacement to the selected columns
+Cleaned_Labdata_Original <- 
+  Cleaned_Labdata_Original %>%
+  mutate(
+    across(
+      .cols = all_of(cols_to_relabel),
+      .fns = ~ replace(., . == "NBG", "No growth")
+    )
+  )
+
+## Check the homogeneity of the data registering ----
+# Trick to select all the columns of type character in Cleaned_Labdata_Original dataset
+Cleaned_Labdata_Original %>%
+  select(where(is.character)) %>%
+  # I modify all the columns from character to factor - because I want to see the "levels" : categories
+  # to identify if you wrote homogeneously 
+  mutate_all(factor)# %>%
+  # Select one column and look at the levels
+  #lapply(levels)
+
+## Further cleaning for homogeneity entries
+Cleaned_Labdata_Original <- 
+  Cleaned_Labdata_Original %>%
+  # `SAMPLE TYPE` is only Stool BUT I do not want to remove because I want to combine with other dataset. 
+  # `SAMPLE FROM` : Fix syntax  "Adult outPatient" "Adult outpatient"
+  mutate(`SAMPLE FROM` = str_replace(`SAMPLE FROM`, "Adult outPatient", "Adult outpatient")) %>%
+  # `NAME OF SCHOOL/HF` Homeogeneize :  "Pasua HC"  "PasuaHC"   From To 
+  mutate(`NAME OF SCHOOL/HF` = str_replace(`NAME OF SCHOOL/HF`, "PasuaHC", "Pasua HC")) %>%
+  #  `COLONY MORPHOLOGY ON C3GR` "Pinkish/Reddish" <- keep this one "pinkish/Reddish"
+  mutate(`COLONY MORPHOLOGY ON C3GR` = str_replace(`COLONY MORPHOLOGY ON C3GR`, "pinkish/Reddish", "Pinkish/Reddish")) %>%
+   mutate(`COLONY MORPHOLOGY ON C3GR` = str_replace(`COLONY MORPHOLOGY ON C3GR`, "Pinkish/Resddish", "Pinkish/Reddish")) %>%
+  # `COLONY MORPHOLOGY ON XLD`  "Black colonies"       "Black colony"         "Blackish colonies"  need to be identical
+  ## "No black colony"      "No blackish colonies" must be identical - Fixed with several choices of equality
+  mutate(`COLONY MORPHOLOGY ON XLD` = 
+           case_when(
+             `COLONY MORPHOLOGY ON XLD`=="No blackish colonies" ~ "No black colony",
+             `COLONY MORPHOLOGY ON XLD`=="Black colonies" ~ "Black colony",
+             `COLONY MORPHOLOGY ON XLD`=="Blackish colonies" ~ "Black colony",
+             TRUE ~ `COLONY MORPHOLOGY ON XLD`)
+  )%>%
+  mutate(
+    Isolate = case_when(
+      Isolate == "S.paratyphi A (Except Indole)" ~ "S.paratyphi A",
+      Isolate == "S.typhi (Except Gas)" ~ "S.typhi",
+      Isolate == "S.typhimariam" ~ "S.typhimurium",
+      Isolate == "Shigella spp ( Except Gas)" ~ "Shigella spp",
+      # Default: Keep all other values in the 'Isolate' column as they are
+      TRUE ~ Isolate 
+    )
+  )
+
+## Replacing NA in Isolate column with No growth
+Cleaned_Labdata_Original$Isolate[is.na(Cleaned_Labdata_Original$Isolate)] <- "No growth"
+#Check for duplicates
+duplicated_test<-Cleaned_Labdata_Original$Isolate_ID[duplicated(Cleaned_Labdata_Original$Isolate_ID)]
+print(duplicated_test)
+
+# Get duplicated IDs (including first occurrences)
+duplicated_test<-Cleaned_Labdata_Original$Isolate_ID[duplicated(Cleaned_Labdata_Original$Isolate_ID, fromLast = TRUE)]
+
+
+# Remove duplicates from the list itself
+unique_duplicated_ids <- unique(duplicated_test)
+
+# Collapse into a single text string
+text_string <- paste(unique_duplicated_ids, collapse = ", ")
+
+# View result
+print(text_string)
+
+
+Cleaned_Labdata_Original <- Cleaned_Labdata_Original %>%
+  # 1. Group the data by Isolate_ID
+  group_by(Isolate_ID) %>%
+  # 2. Count the number of times each Isolate_ID appears
+  mutate(Isolate_ID_repeat_count = n()) %>%
+  # 3. Assign a sequential count (1, 2, 3...) within each Isolate_ID group
+  mutate(Isolate_ID_row_count = row_number()) %>%
+  # 4. Remove the grouping
+  ungroup() %>%
+  # 5. Modify the Isolate_ID based on the counts
+  mutate(Isolate_ID = case_when(
+    # The condition: If Isolate_ID appeared exactly 2 times AND it's the second row
+    Isolate_ID_repeat_count == 2 & Isolate_ID_row_count == 2 ~
+      # Action: Append the row count (2) to the Isolate_ID
+      paste(Isolate_ID, Isolate_ID_row_count, sep = "_"),
+    
+    # The default: Otherwise, keep the original Isolate_ID
+    TRUE ~ Isolate_ID
+  ))
+
+
+# We have now new Isolate_IDs as some were duplicates, but we will remove one further below.
+Test<- Cleaned_Labdata_Original %>% 
+  select(INIKA_ID, Isolate_ID,Isolate, Isolate_ID_repeat_count, Isolate_ID_row_count,
+         REGION, SEASON, `SAMPLE FROM`,`COLONY MORPHOLOGY ON BGA`, `COLONY MORPHOLOGY ON CARBA`, `COLONY MORPHOLOGY ON XLD`, `COLONY MORPHOLOGY ON C3GR` ) %>% 
+  filter(Isolate_ID_repeat_count=="2")
+## Found one true duplicate, removed it below
+
+Cleaned_Labdata_Original <- Cleaned_Labdata_Original%>% 
+  mutate(Isolate_ID =case_when(Freezing_ID_No=="21161-1_D" ~ "21161_1_D",
+                               Freezing_ID_No=="2146-1_D" ~ "2156_1_D",
+                               TRUE ~ Isolate_ID,
+                               ))%>% 
+    filter(Isolate_ID!="22315_1_R_2")%>%
+  filter(INIKA_ID !="21267")
+
+
+```
+Import the next file with those that were selected for confirmation at TVLA
+```{r}
+
+# Use both parameters together
+DRY_RAINY_MWZ_KILIMANJARO_AST2 <- read_excel(
+  path = params$selection_file,
+  sheet = params$selection_sheet
+)
+
+head(DRY_RAINY_MWZ_KILIMANJARO_AST2)
+library(dplyr)
+library(stringr)
+# Selecting (Deselect) relevant columns
+DRY_RAINY_MWZ_KILIMANJARO_AST2 <- 
+  DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+  select(-`S/No`, -`SAMPLE TYPE`,
+         -`Season Included in Number? ( evt. how?)`,-Comment_)%>%
+  mutate(
+    INIKA_ID = str_replace_all(INIKA_ID, "NIKA_", "INIKA_"),   # First replacement
+    INIKA_ID = str_replace_all(INIKA_ID, "INIKA_", ""),        # Second replacement
+    INIKA_ID = str_replace_all(INIKA_ID, "I", "")              # Third replacement
+  ) %>%
+  mutate_if(is.character, factor) %>%
+  mutate(
+    # Extract first part of INIKA_ID
+    INIKA_prefix   = str_extract(INIKA_ID, "^[^_]+"),
+    
+    # Remove first part of Freezing_ID_No
+    Isolate_suffix = str_replace(Freezing_ID_No, "^[^_]+_", ""),
+    
+    # Combine to make corrected ID
+    Isolate_ID     = paste0(INIKA_prefix, "_", Isolate_suffix)
+  )
+# 1. Group the data by Isolate_ID
+
+DRY_RAINY_MWZ_KILIMANJARO_AST2 <- 
+  DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+group_by(Isolate_ID) %>%
+  # 2. Count the number of times each Isolate_ID appears
+  mutate(Isolate_ID_repeat_count = n()) %>%
+  # 3. Assign a sequential count (1, 2, 3...) within each Isolate_ID group
+  mutate(Isolate_ID_row_count = row_number()) %>%
+  # 4. Remove the grouping
+  ungroup() %>%
+  # 5. Modify the Isolate_ID based on the counts
+  mutate(Isolate_ID = case_when(
+    # The condition: If Isolate_ID appeared exactly 2 times AND it's the second row
+    Isolate_ID_repeat_count == 2 & Isolate_ID_row_count == 2 ~
+      # Action: Append the row count (2) to the Isolate_ID
+      paste(Isolate_ID, Isolate_ID_row_count, sep = "_"),
+    
+    # The default: Otherwise, keep the original Isolate_ID
+    TRUE ~ Isolate_ID
+  ))
+
+
+## Re labeling the data in the columns
+# List the columns to be modified
+
+cols_to_relabel <- c(
+  "COLONY MORPHOLOGY ON C3GR", 
+  "COLONY MORPHOLOGY ON CARBA", 
+  "COLONY MORPHOLOGY ON XLD", 
+  "COLONY MORPHOLOGY ON BGA"
+) 
+
+# Apply the replacement to the selected columns
+DRY_RAINY_MWZ_KILIMANJARO_AST2 <- DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+  mutate(
+    across(
+      .cols = all_of(cols_to_relabel),
+      .fns = ~ replace(., . == "NBG", "No growth")
+    )
+  )
+
+## Check the homogeneity of the data registering ----
+# Trick to select all the columns of type character in DRY_RAINY_MWZ_KILIMANJARO_AST2 dataset
+DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+  select(where(is.character)) %>%
+  # I modify all the columns from character to factor - because I want to see the "levels" : categories
+  # to identify if you wrote homogeneously 
+  mutate_all(factor) %>%
+  # Select one column and look at the levels
+  lapply(levels)
+
+## Further cleaning for homogeneity entries
+DRY_RAINY_MWZ_KILIMANJARO_AST2 <- 
+  DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+  # `SAMPLE TYPE` is only Stool BUT I do not want to remove because I want to combine with other dataset. 
+  # `SAMPLE FROM` : Fix syntax  "Adult outPatient" "Adult outpatient"
+  mutate(`SAMPLE FROM` = str_replace(`SAMPLE FROM`, "Adult outPatient", "Adult outpatient")) %>%
+  # `NAME OF SCHOOL/HF` Homeogeneize :  "Pasua HC"  "PasuaHC"   From To 
+  mutate(`NAME OF SCHOOL/HF` = str_replace(`NAME OF SCHOOL/HF`, "PasuaHC", "Pasua HC")) %>%
+  #  `COLONY MORPHOLOGY ON C3GR` "Pinkish/Reddish" <- keep this one "pinkish/Reddish"
+  mutate(`COLONY MORPHOLOGY ON C3GR` = str_replace(`COLONY MORPHOLOGY ON C3GR`, "pinkish/Reddish", "Pinkish/Reddish")) %>%
+  # `COLONY MORPHOLOGY ON XLD`  "Black colonies"       "Black colony"         "Blackish colonies"  need to be identical
+  ## "No black colony"      "No blackish colonies" must be identical - Fixed with several choices of equality
+  mutate(`COLONY MORPHOLOGY ON XLD` = 
+           case_when(
+             `COLONY MORPHOLOGY ON XLD`=="No blackish colonies" ~ "No black colony",
+             `COLONY MORPHOLOGY ON XLD`=="Black colonies" ~ "Black colony",
+             `COLONY MORPHOLOGY ON XLD`=="Blackish colonies" ~ "Black colony",
+             TRUE ~ `COLONY MORPHOLOGY ON XLD`)
+  ) 
+#NB: $CITRATE  "+" "-" "d" ->  intermediary : its a standard code : we keep it like that 
+
+## Renaming the data entries in Isolate column
+DRY_RAINY_MWZ_KILIMANJARO_AST2 <- DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+  mutate(
+    Isolate = case_when(
+      Isolate == "S.typhimariam" ~ "S.typhimurium",
+      # Default: Keep all other values in the 'Isolate' column as they are
+      TRUE ~ Isolate 
+    )
+  )
+
+### Inserting new column "VITEK" ----
+# Create the new column 'VITEK' and assign the value 1 to all rows, this means these have been selected for VITEK confirmation
+Selection<- 
+  DRY_RAINY_MWZ_KILIMANJARO_AST2 %>%
+  mutate(VITEK = 1) %>%
+  # Relocate the new column immediately after 'Isolate_ID'
+  relocate(VITEK, .after = Isolate_ID)
+
+
+
+#Check for duplicates
+duplicated_test<-DRY_RAINY_MWZ_KILIMANJARO_AST2$Isolate_ID[duplicated(DRY_RAINY_MWZ_KILIMANJARO_AST2$Isolate_ID)]
+print(duplicated_test)
+
+
+
+```
+Importing the original KOBOTOOLBOX data which contains the sampledata, demography
+```{r}
+library(readxl)
+KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_2025_06_12_18_24_20 <- read_excel("data/KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_-_2025-06-12-18-24-20.xlsx",
+             na = c("","NA"))
+
+#'Origin of sample' == "Outpatient"
+#'Age (yrs)' == "45")
+Check_KOBO<-KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_2025_06_12_18_24_20 %>%
+  filter(Region=="Kilimanjaro", District=="Moshi Rural", Season=="Wet" )
+
+## Selecting relevant columns (removing unwanted columns) ----
+Demographic_cleaned_data <-
+  KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_2025_06_12_18_24_20 %>%
+  select(INIKA_OH_TZ_ID,`Age (yrs)`, Season, GPS_coordinates, `_GPS_coordinates_latitude`,  `_GPS_coordinates_longitude`,
+         `_GPS_coordinates_precision`,Region, District, `Origin of sample`, `If school-aged children, name of the school*`,
+         `Which class/grade are you?*`,`Who is your caretaker?*`,`If others, mention`,`What is your occupation and/or of your caretaker?*`,
+         `Have you ever heard about AMR?`, `If yes, how did you get this information?`, `Have you or your children used any antibiotics at any time?`,
+         `Have you or your children used any antibiotics in the past six months?`, `If yes, where did you get these drugs from?`,
+         `If it was drug sellers or pharmacy; did you have a prescription from the doctor/prescriber?`,
+         `If was prescribed by the prescriber, was it after Laboratory results of culture and sensitivity?`,
+         `Do you have farm animals at your home place?`,`If Yes, do you participate in taking care of animals i.e. cleaning, Feeding?`, 
+         `Are your animals being treated for any diseases?`, `Do you have a poultry farm at your home?`,
+         `If yes, are they for eggs or meat?`,`Do you participate in taking care of Poultry i.e. Cleaning/Feeding?`,
+         `Are your Poultry being treated by veterinary doctor?`, `If Yes, does the veterinary doctor tell you about the withdrawal time?`,
+         `Do you have a toilet at your home place?`, `Do you wash your hands with soap after every toilet visit?`,Gender,`Origin of sample`,
+         - GPS_coordinates) %>%
+  rename("Latitude" = `_GPS_coordinates_latitude`,
+         "Longitude" = `_GPS_coordinates_longitude`,
+         "GPS_Precision" = `_GPS_coordinates_precision`,
+         INIKA_ID = INIKA_OH_TZ_ID,
+         Age_yrs = `Age (yrs)`,
+         GENDER = `Gender`,
+         REGION = `Region`,
+         DISTRICT = `District`,
+         SEASON = `Season`,
+         ORIGIN_OF_SAMPLE = `Origin of sample`
+         ) %>% 
+  # Consider keeping as double
+  mutate_at(.vars = "Age_yrs", as.character)
+
+
+# Reordering the columns
+Demographic_cleaned_data <- 
+  Demographic_cleaned_data %>%
+  select(INIKA_ID, 
+         Age_yrs,
+         GENDER, 
+         SEASON,,
+         REGION, DISTRICT,
+         ORIGIN_OF_SAMPLE,
+         Latitude, Longitude, GPS_Precision,
+         everything())
+
+
+
+# Get a logical vector: TRUE for elements that are duplicates (2nd, 3rd, etc. occurrences)
+duplicates_logical <- duplicated(Demographic_cleaned_data$INIKA_ID)
+#sum(duplicates_logical)
+
+# Extract the actual duplicated ID values
+duplicate_INIKA_IDs <- 
+  Demographic_cleaned_data$INIKA_ID[duplicates_logical]
+
+duplicate_INIKA_IDs
+# Alternative - not better though
+# Demographic_cleaned_data$INIKA_ID[
+#   which(duplicated(Demographic_cleaned_data$INIKA_ID))
+# ]
+
+
+# View the unique duplicate ID values
+unique_duplicate_INIKA_IDs <- unique(duplicate_INIKA_IDs)
+
+# Print the result
+print(unique_duplicate_INIKA_IDs)
+
+#First check if the duplicated ID has exactly the same data
+Demographic_cleaned_data %>%
+  filter(INIKA_ID %in% unique_duplicate_INIKA_IDs) %>%
+  arrange(INIKA_ID) %>%
+  View()
+
+#Remove the duplicates and maintain the fist occurrence
+Demographic_cleaned_data <- 
+  Demographic_cleaned_data %>%
+  filter(INIKA_ID !=21267)%>%
+  # Select only unique rows based on the INIKA_ID column
+  # .keep_all = TRUE ensures that all other columns from the first 
+  # row for each unique INIKA_ID are retained.
+  distinct(INIKA_ID, .keep_all = TRUE)
+
+Check_KOBO<-Demographic_cleaned_data %>%
+  filter(REGION=="Kilimanjaro", DISTRICT=="Moshi Rural", SEASON=="Wet" )
+
+
+# Madelaine:_transforming INIKA_ID to charachter
+Demographic_cleaned_data$INIKA_ID <- as.character(Demographic_cleaned_data$INIKA_ID)
+
+# View a preview of the resulting data frame
+#head(Demographic_cleaned_data)
+
+#2204 unique Ids remained after removing one duplicate (21267)
+
+#Draw a table
+
+#Define Age Bins and Create the Summary Table
+
+summary_table <- Demographic_cleaned_data %>%
+  mutate(Age_yrs=as.numeric(Age_yrs))%>%
+   
+   # Create the Age Range column using the 'Age_yrs' column
+   mutate(`Age Range` = cut(Age_yrs,
+                            breaks = c(10, 18, 28, 38, 48, 58, 68, 78, 89), # 89 ensures 78-88 is captured
+                            labels = c('10 - 17', '18 - 27', '28 - 37', '38 - 47', 
+                                       '48 - 57', '58 - 67', '68 - 77', '78 - 88'),
+                            right = FALSE)) %>% # 'right = FALSE' makes the lower bound inclusive
+   
+   # Group by all requested demographic variables and the new age range
+   group_by(REGION, DISTRICT, GENDER, SEASON, ORIGIN_OF_SAMPLE, `Age Range`) %>%
+   
+   # Count the number of observations (rows) for each group,
+   #    as an explicit 'Total' column was not provided.
+   summarise(`Total Count` = n()) %>%
+   
+   # Remove grouping structure
+   ungroup()
+ 
+ # Print the resulting table
+ print(summary_table)
+  
+write_csv(summary_table, 
+          "Results/Demographic_Summary_Table_Final_Test.csv")
+# Compute the Interquartile Range (IQR) 
+# The na.rm = TRUE argument ensures that missing values are ignored in the calculation.
+iqr_age <- IQR(Demographic_cleaned_data$Age_yrs, na.rm = TRUE)
+
+# Print the result
+print(paste("The Interquartile Range (IQR) of Age_yrs is:", iqr_age))
+
+#library(dplyr)
+#library(tidyr)
+library(leaflet)
+
+#Drawing a map
+map_data <- Demographic_cleaned_data %>%
+  # Rename columns 7 and 8 for clarity in the map code
+  rename(
+    latitude = 7,  # Column number 7 as Latitude
+    longitude = 8  # Column number 8 as Longitude
+  ) %>%
+  # Ensure both columns are treated as numeric
+  mutate(
+    latitude = as.numeric(latitude),
+    longitude = as.numeric(longitude)
+  ) %>%
+  # Remove any rows where conversion failed or coordinates are missing (NA)
+  filter(!is.na(latitude) & !is.na(longitude))
+
+# 2. Draw the Interactive Map using Leaflet
+map_leaflet <- map_data %>%
+  leaflet() %>%
+  # Add a base map layer (OpenStreetMap is a good default)
+  addTiles() %>%
+  # Add markers for each GPS coordinate in your dataset
+  addMarkers(
+    lat = ~latitude,
+    lng = ~longitude,
+    # Optional: Add a popup showing the coordinates when a marker is clicked
+    popup = ~paste("Lat:", latitude, "<br>Lng:", longitude)
+  )
+
+# 3. Display the map
+map_leaflet
+
+```
+
+Importing the original lab MALDITOF_RESULTS (From TVLA)
+
+```{r}
+
+MALDITOF_RESULTS <- read_excel("data/MALDITOF_RESULTS.xlsx")
+# Data cleaning ----
+#Looking at the data structure ----
+glimpse(MALDITOF_RESULTS)
+MALDITOF_RESULTS[, "Isolate ID"]
+#str(MALDITOF_RESULTS)
+#names(MALDITOF_RESULTS)
+#Selecting relevant columns (removing unwanted columns) ----
+MALDITOF_RESULTS_cleaned_data <-
+  MALDITOF_RESULTS %>%
+  select( "Isolate ID" , `Biochemica Id by Maulid`,"VITEK MS  Results")
+
+# Renaming the column and name it TVLA_ID
+MALDITOF_RESULTS_cleaned_data <-
+  MALDITOF_RESULTS_cleaned_data %>%
+  rename(VITEK_MS_Results = `VITEK MS  Results`,
+         TVLA_ID = `Isolate ID`)
+
+# Relocate the TVLA_ID, not necessary as we only have one TVLA_ID now!
+#MALDITOF_RESULTS_cleaned_data <- MALDITOF_RESULTS_cleaned_data %>%
+#relocate(TVLA_ID, .after = TVLA_ID)
+
+## Replacing "-" with "_" in TVLA_ID column
+MALDITOF_RESULTS_cleaned_data$TVLA_ID <- gsub("-", "_", MALDITOF_RESULTS_cleaned_data$TVLA_ID)
+
+```
+Re writing the entries in TVLA_ID to match with that in Original Lab data, seems to have been some mispellings in the data from TVLA, I suggest to call this corrected_TVLA_ID instead to not loose TVLA IDs, MN found mistakes in the file that have been joined in ). Join, so need to correct below 2374_1_D, 11301_1_R and 13122_1_D
+
+```{r}
+MALDITOF_RESULTS_cleaned_data <-
+  MALDITOF_RESULTS_cleaned_data%>%
+ # some Isolates removed due to duplications of ID 
+filter(!(TVLA_ID == "23372_1_R" & `Biochemica Id by Maulid` == "Klebsiella pneumoniae"))%>%
+filter(!(TVLA_ID == "23224_1_R" & VITEK_MS_Results  == "No Identification" ))%>%
+# Correcting misspellings and misidentification as far as possible
+  mutate(Isolate_ID = case_when(
+    TVLA_ID == "1152_1_D G.N" ~ "1152_1_D",
+    TVLA_ID== "11321_(i)_R" ~ "11321_1_R",
+    TVLA_ID== "11214(i)_R"  ~ "11214_1_R",
+    TVLA_ID== "11253_1_R"  ~ "11252_1_R",
+    TVLA_ID== "11262(i)_R"  ~ "11262_1_R",
+    TVLA_ID== "11348(i)_R"  ~ "11348_1_R",
+    TVLA_ID== "122_1_D"  ~ "125_1_D",
+    TVLA_ID== "1268_1_R"  ~ "1268_1_D",
+    TVLA_ID== "12132(i)_D"  ~ "12132_1_D",
+    TVLA_ID== "21337_(i)_R"  ~ "21337_1_R",
+    TVLA_ID== "23124_1_R"  ~ "23124_1_D",
+    TVLA_ID== "25256_2_R"  ~ "23256_2_R",
+    TVLA_ID== "23316_1R"  ~ "23316_1_R",
+    TVLA_ID== "23237_R_"  ~ "23237_1_R",
+    TVLA_ID== "13235_2_R"  ~ "13235_1_R",
+    TVLA_ID== "12310_2_R"  ~ "12310_1_R",
+    TVLA_ID== "12285_1_R_"  ~ "12285_1_R",
+    TVLA_ID== "13122_1_D"  ~ "13123_1_D", # MN corrected it has to be in this direction
+    TVLA_ID== "2337_1_R"  ~ "23370_1_R",
+    TVLA_ID== "2216_1_D"  ~ "22161_1_D",
+    TVLA_ID== "2369_1_D"  ~ "2366_1_D",
+    TVLA_ID== "23347_2_"  ~ "23347_2_R",
+    TVLA_ID== "23220_1_C"  ~ "23220_1_R",
+    TVLA_ID== "23282_1_"  ~ "23282_1_R",
+    TVLA_ID== "23308_1_R"  ~ "23308_2_R",
+    TVLA_ID== "23320_2_"  ~ "23320_2_R",
+    TVLA_ID== "21220_(i)_R"  ~ "21220_1_R",
+    TVLA_ID== "21209_(i)_R"  ~ "21209_1_R",
+    TVLA_ID== "2111_(i)_D"  ~ "2111_1_D",
+    TVLA_ID== "12195(II)_R"  ~ "12195_2_R",
+    TVLA_ID== "12195(i)_R"  ~ "12195_1_R",
+    TVLA_ID== "11353_(i)_R"  ~ "11353_1_R",
+    TVLA_ID== "11350(ii)"  ~ "11350_2_R",
+    TVLA_ID== "11359(i)_R"  ~ "11359_1_R",
+    TVLA_ID== "11308(i)_R"  ~ "11308_1_R",
+    TVLA_ID== "11191(ii)_R"  ~ "11191_2_R",
+    TVLA_ID== "C.1197_1_DMV"  ~ "1197_1_D",
+    TVLA_ID== "11154mv"  ~ "11154_1_D",
+    TVLA_ID== "1164_1_DMV"  ~ "1164_1_D",
+    TVLA_ID== "12125_1_D"  ~ "12125_2_D",
+    TVLA_ID== "2291_1_D"  ~ "2291_2_D",
+    TVLA_ID== "1166_1_R"  ~ "1166_1_D",
+    TVLA_ID== "12125_1_D"  ~ "12125_2_D",
+    TVLA_ID== "23142_1_R"  ~ "23142_1_D",
+    TVLA_ID== "23131-1-D"  ~ "23131_1_D",
+    TVLA_ID== "12311_1_R"  ~ "12311_2_R",
+    TVLA_ID== "2234_2_R"  ~ "22347_2_R",
+    TVLA_ID== "2236_2_R"  ~ "22362_2_R",
+    TVLA_ID== "212348_1_R" ~ "22348_2_R",
+    TVLA_ID == "23308_2" ~ "23308_2_R_2",
+    TVLA_ID == "12203_2"  ~ "12203_2_R",
+    TVLA_ID == "11301-1-R"  ~ "11301_2_R", # MN new correction
+    TVLA_ID == "2374-1-D"  ~ "2374_1_D", # MN new correction
+    TVLA_ID == "2220_1_R"  ~ "22204_1_R", # MMJ new correction 23/10/25 and below
+    TVLA_ID == "232606_2_R"  ~ "23260_2_R",  
+    TVLA_ID == "11301_1_R"  ~ "11301_2_R",
+    TVLA_ID == "21161_1_D"  ~ "21161_1_D",
+    TVLA_ID == "21185_1_R"  ~ "21185_2_R",
+    TVLA_ID == "21294_1_R"  ~ "21294_2_R",
+    TVLA_ID == "23286_2_R"  ~ "23286_1_R",
+    #TVLA_ID == "12300_1_R"  ~ "12300_2_R", 20.03.26 MN change here so it can be joined with whonet the 12300_2_R was the freezing number but that is not recorded in WHONET?
+    TVLA_ID == "12324_11_R"  ~ "12324_1_R",
+    TVLA_ID == "22285_1_D"  ~ "22285_1_R",
+    #TVLA_ID == "22131_2_D"  ~ "22131_1_D", # MN Note why was this one corrected it is numbered 22131_2_D in the WHONETdata! # But if this is the case we should keep it as it is!# MMJ; There is typing error, This number two isolates were isolated, Isolate 1 was E.coli and was not selected for AST, Isolate 2 was K.pneumoniae which was selected
+    TVLA_ID == "2223_2_R"  ~ "22231_2_R",
+    TVLA_ID == "22145_1_D"  ~ "22145_2_D",
+    TVLA_ID == "22845_1_R"  ~ "22345_1_R",
+    TVLA_ID == "12336_1_R"  ~ "12336_2_R",
+    TVLA_ID =="21335_1_R" ~ "21235_1_R", # MN attached some more, correct?
+    
+    TRUE ~ TVLA_ID  # This is the "else" condition: keep any other values as they are
+  ))%>%
+  # Remove first part of Isolate_ID to use as the INIKA_ID for possible joining by two columns
+  mutate(
+    # Matches the first underscore (_) followed by any character (.) 
+    # zero or more times (*), and removes the entire match.
+    INIKA_ID = str_remove(Isolate_ID, "_.*")
+  )
+
+
+  MALDITOF_RESULTS_cleaned_data<-unique(MALDITOF_RESULTS_cleaned_data)
+
+    
+
+# Joining and checking until we managed to identify almost all that were not joined, used the helpfile ( where results was imported from the files below) in excel for checking
+
+ ## Importing the MALDITOF results from NVI ## 02.03.2026 MMJ
+  # Note here you can not import the first 3 rows!_ But I decide that we will not join it with the TVLA data here but with WHONET data later on
+  NVI_MALDITOF_results <- read_excel("data/MALDITOF_NVI 25feb2026.xlsx", skip=3)
+  str(NVI_MALDITOF_results)
+  
+NVI_MALDITOF_results <- NVI_MALDITOF_results %>%
+    rename(Isolate_NVI='Maldi-Tof. 25/2-26 tmf',Isolate_ID = Isolatnr) %>%
+   mutate(`Isolate_ID` = str_replace_all(`Isolate_ID`, "-", "_"))%>%
+  mutate(INIKA_ID=str_extract(`Isolate_ID`, "^[^_]+"))
+         
+# Combine the MALDITOF_RESULTS_cleaned_data and NVI_MALDITOF_results
+#  combined_MALDITOF_Results <- full_join(MALDITOF_RESULTS_cleaned_data, #NVI_MALDITOF_results, by = c("Isolate_ID"))
+  
+#  combined_MALDITOF_Results<- combined_MALDITOF_Results%>%
+#    mutate(INIKA_ID = coalesce(INIKA_ID.x, INIKA_ID.y))%>%
+ #   select (-c(INIKA_ID.x, INIKA_ID.y))
+ 
+  # Here we make sure that we are joining in the combined_MALDITOF_Results ( Carbaresults as well)
+  # JoinedMALDITOF_Selected<-left_join(combined_MALDITOF_Results,DRY_RAINY_MWZ_KILIMANJA#RO_AST2,by = "Isolate_ID")
+#  notjoinedMALDITOF<-anti_join(combined_MALDITOF_Results,DRY_RAINY_MWZ_KILIMANJARO_AST2#,by = "Isolate_ID")
+
+  # We need to ensure we have one column that contain the INIKA_ID, now there is one #INIKA_ID.x, INIKA_ID.y and one INIKA_ID. if the INIKA_ID is missing we can use the #INIKA_ID.x and then we only keep the INIKA_ID.
+ 
+    
+#JoinedMALDITOF_Selected <- JoinedMALDITOF_Selected %>%
+#  rename(INIKA_ID=INIKA_ID.x, Isolate=Isolate.x)%>%
+# select (-c(INIKA_ID.y))
+# We only keep the columns needed as there otherwise will be to many duplications of the columns in the joined_data in the end
+# here it would be possible to malke a coalesce for VITEK_MS_Results and Isolate.x
+
+#DuplicationsTVLA<-combined_MALDITOF_Results$Isolate_ID[duplicated(combined_MALDITOF_Res#ults$Isolate_ID)] 
+#Duplications<-DuplicationsTVLA
+#view(Duplications)
+
+Selection<-DRY_RAINY_MWZ_KILIMANJARO_AST2
+# Not sure if we will use the Selection as this only contains those that were confirmed by TVLA, The one below contains also those CARBA confirmed  at NVI.
+
+VITEK<-MALDITOF_RESULTS_cleaned_data
+
+```
+Checking duplicates
+```{r}
+
+#This one is not necessary/ Now needed 
+MALDITOF_RESULTS_duplicates <- MALDITOF_RESULTS_cleaned_data$Isolate_ID[duplicated(MALDITOF_RESULTS_cleaned_data$Isolate_ID)]
+print("Actual duplicated Isolate_IDs (second or subsequent appearance):")
+print(MALDITOF_RESULTS_duplicates) 
+
+
+
+      
+#Need to remove duplicates if they are true duplicates in MALDITOF_RESULTS_cleaned_data
+MALDITOF_RESULTS_cleaned_data <- unique(MALDITOF_RESULTS_cleaned_data)%>%
+filter(TVLA_ID!="125_1_D") 
+#Of unknown reasons if running this we loose the NVI data
+```
+
+```{r}
+
+MALDITOF_RESULTS_cleaned_data<- MALDITOF_RESULTS_cleaned_data %>%
+  # 1. Group the data by Isolate_ID
+  group_by(Isolate_ID) %>%
+  # 2. Count the number of times each Isolate_ID appears
+  mutate(Isolate_ID_repeat_count = n()) %>%
+  # 3. Assign a sequential count (1, 2, 3...) within each TVLA_ID group
+  mutate(Isolate_ID_row_count = row_number()) %>%
+  # 4. Remove the grouping
+  ungroup() %>%
+  # 5. Modify the Isolate_ID based on the counts
+  mutate(Isolate_ID = case_when(
+    # The condition: If Isolate_ID appeared exactly 2 times AND it's the second row
+    Isolate_ID_repeat_count == 2 & VITEK_MS_Results != "Escherichia coli" ~
+      # Action: Append the row count (2) to the Isolate_ID
+      paste(Isolate_ID, Isolate_ID_row_count, sep = "_"),
+    
+    # The default: Otherwise, keep the original TVLA_ID
+    TRUE ~ Isolate_ID
+  ))
+
+# Checking for the isolates that remains in the dataset after removing the duplicates, we could have removed the whole observation, but some of these might hav ebeen selected for further confirmation at NVI
+Test<-MALDITOF_RESULTS_cleaned_data %>%
+  filter(Isolate_ID%in% c( "21228_1_R" ,"23248_2_R" ,"23277_2_R", "23308_2_R", "13235_1_R" ,"23372_1_R","23224_1_R","23370_1_R"  ))
+
+## Creating new column named ESC indicating the isolates for AST
+MALDITOF_RESULTS_cleaned_data <- MALDITOF_RESULTS_cleaned_data %>%
+  mutate(
+    ESC = if_else(
+      VITEK_MS_Results %in% c("Escherichia coli", "Klebsiella pneumoniae"),
+      1,
+      0
+    )
+  )
+
+
+# 3o/10/2025 Corrected one isolate_ID above 
+# Selecting confirmed Isolate as ESC for the Cleaneddata where we have the AST data
+
+AST_ISOLATES <- MALDITOF_RESULTS_cleaned_data %>% 
+  filter(ESC == 1)
+
+## Duplicates checking
+AST_ISOLATES_duplicates <- AST_ISOLATES$Isolate_ID[duplicated(AST_ISOLATES$Isolate_ID)]
+print("Actual duplicated TVLA_IDs (second or subsequent appearance):")
+print(AST_ISOLATES_duplicates) ## "23277_2_R"
+```
+Cleaning of the 4. script
+```{r}
+# Importing the original WHONET DATA
+WHONET_DATA_9_9_2025 <- read_excel("data/WHONET DATA_9_9_2025.xlsx")
+
+## Looking at the data structure ----
+glimpse(WHONET_DATA_9_9_2025)
+str(WHONET_DATA_9_9_2025)
+names(WHONET_DATA_9_9_2025)
+
+WHONET_Cleaned_data <-WHONET_DATA_9_9_2025 %>%
+  select(-ROW_IDX, -LABORATORY, -COUNTRY_A, -PATIENT_ID, -X_SPECIES, -INSTITUT, -SPEC_TYPE, - X_AST_DATE, -SPEC_CODE, -X_SPEC_HUM, -X_SPEC_ANI, 
+         -X_SPEC_ENV, -ISOL_NUM, -ORG_TYPE, -COMMENT, -DATE_DATA, -TYL_ED30, -ORIGIN)%>%
+
+#Changing the numeric into character across the columns
+  #Use mutate and across to apply the change to multiple columns
+  mutate(
+    #Select all columns that are currently numeric 
+    across(where(is.numeric), ~ as.character(.))
+  )%>%
+
+#Renaming the columns names
+rename(Isolate_ID = `SPEC_NUM`,
+       INIKA_ID = `X_INIKA_ID`,
+       REGION = `X_REGION`,
+       DISTRICT = `X_DISTRICT`,
+       SEASON = `X_SEASON`,
+       ORIGIN_OF_SAMPLE = `X_ORIGIN_T`,
+       PROTOCOL = `X_PROTOCOL`)%>%
+  mutate(Isolate_ID=case_when(Isolate_ID =="222o6_1_R" ~ "22206_1_R",
+                              TRUE~Isolate_ID))%>%
+  mutate(PROTOCOL=case_when(Isolate_ID =="12232_1_R"  ~ "CARBA",
+                            TRUE ~ PROTOCOL))
+
+#Duplicates checking in INIKA_ID column
+WHONET_duplicates <- WHONET_Cleaned_data$INIKA_ID[duplicated(WHONET_Cleaned_data$INIKA_ID)]
+print("Actual duplicated Isolate_IDs (second or subsequent appearance):")
+print(WHONET_duplicates)
+
+WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
+   mutate(
+  CTC_ED30 = as.numeric(as.character(CTC_ED30)),
+  CTX_ED5 = as.numeric(as.character(CTX_ED5)),
+  CRO_ED5 = as.numeric(as.character(CRO_ED30)),
+
+  
+   ESBL_Selection = CTC_ED30 - CTX_ED5
+   )
+
+WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
+  mutate(
+    ESCR_ECO_presumptive = case_when(
+      ORGANISM == "eco" & CTX_ED5  < 22 ~ 1,
+      ORGANISM == "eco" & CRO_ED30 < 23  ~ 1,
+      TRUE ~ 0
+    ),
+    ESCR_KPN_presumptive = case_when(
+      ORGANISM == "kpn" & CTX_ED5 < 21 ~ 1,
+      ORGANISM == "kpn" & CRO_ED30 < 23  ~ 1,
+      TRUE ~ 0
+    ),
+    ESBL_Presumptivefinal = case_when(
+      (ESCR_KPN_presumptive == 1 | ESCR_ECO_presumptive == 1) & ESBL_Selection >= 5 ~ 1,
+      TRUE ~ 0
+    )
+  )
+# Testing to join the NVI isolates here just to se that they are correct spelled in WHONET- This is probably a better option to not mess up the TVLA data
+
+Test <- left_join(WHONET_Cleaned_data, NVI_MALDITOF_results, by = c("Isolate_ID"))
+
+WHONET_Cleaned_data<-Test
+#Need to write over the last FIle
+# Exporting the file as rds
+#saveRDS(WHONET_Cleaned_data,"data/CLEANED_DATA/4_WHONET_Cleaned_data-2025-10-08.rds")
+saveRDS(WHONET_Cleaned_data,"data/CLEANED_DATA/4_WHONET_Cleaned_data-2026-03-11.rds")
+
+
+#write.csv(WHONET_Cleaned_data_ESBL,"data/CLEANED_DATA/WHONET_Cleaned_data_ESBL.csv")
+
+
+#Now all original files have been cleaned, and if anything occurs to not be joined in #the last code for joining to a "final" dataset which should contain all the datasets #together- we need to change accordingly in this script.
+
+#Dataset from Kobotoolbox_all samples with demographic data
+
+
+
+
+
+
+
+
+#Dataset from labdata
+```
+
+
+
+
+```{r}
+Kobo<-Demographic_cleaned_data
+Kobo$INIKA_ID <- as.character(Kobo$INIKA_ID)
+```
+
+```{r}
+Labdata <- Cleaned_Labdata_Original
+#Change to character from the INIKA_ID to Numeric in Labdata for compatible joining with Kobo data. By MMJ 21-10_2025
+Labdata$INIKA_ID <- as.character(Labdata$INIKA_ID)
+#join Kobo Labdata
+
+joined_data <- Kobo %>%
+  left_join(Labdata, by = "INIKA_ID")
+
+# Checked all have been joined
+Checknotjoined<-anti_join(Labdata,Kobo, by="INIKA_ID")
+
+# NB! We have assigned the MALDITOF_RESULTS_cleaned_data from the #JoinedMALDITOF_Selected at line 677 above!
+# Join the joined_data with the Selection by using Isolate_ID
+joined_data <- joined_data %>%
+  left_join(MALDITOF_RESULTS_cleaned_data , by = "Isolate_ID")%>%
+ distinct()
+ # Checked all have been joined
+Checknotjoined<-anti_join(Selection,joined_data, by="Isolate_ID")
+
+
+joined_data <- joined_data %>%
+  left_join(WHONET_Cleaned_data, by = "Isolate_ID")
+
+Checknotjoined<-anti_join(WHONET_Cleaned_data,joined_data, by="Isolate_ID")
+
+write.csv(joined_data,"data/CLEANED_DATA/joined_data_16.3.26.csv")
+```
+Note we still have some repeating columns , but it will not matter, however it would be fine to have the joining nicer performed.
+
+```{r}
+Test_LabNVI <-Labdata  %>%
+  left_join(NVI_MALDITOF_results, by = "Isolate_ID")
+```
+
+
+
