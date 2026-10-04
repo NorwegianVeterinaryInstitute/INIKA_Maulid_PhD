@@ -1,5 +1,60 @@
 # k y---
-  title: "Descriptive analysis of AMR data"
+ # Pivot and Classify 
+    Ecoli_Long <- Data_Clean %>%
+      pivot_longer(
+        cols = any_of(abx_classes$Antimicrobial_substance),
+        names_to = "Antimicrobial_substance",
+        values_to = "value"
+      ) %>%
+      left_join(EPI_CUTOFF, by = "Antimicrobial_substance") %>%
+      mutate(
+        S_num = as.numeric(str_replace_all(S, "[^0-9.]", "")),
+        R_num = as.numeric(str_replace_all(R, "[^0-9.]", "")),
+        Measured_Zone = as.numeric(str_trim(value)),
+        Categorical_Result = case_when(
+          Measured_Zone >= S_num ~ "S",
+          Measured_Zone <= R_num ~ "R",
+          Measured_Zone > R_num & Measured_Zone < S_num ~ "I",
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      filter(!is.na(Categorical_Result))
+    
+    # Summary Logic 
+    calculate_summary <- function(df, group_var) {
+      group_cols <- if(group_var == "Overall") "Antimicrobial_substance" else c(group_var, "Antimicrobial_substance")
+      df %>%
+        group_by(across(all_of(group_cols))) %>%
+        summarise(
+          Total = n(),
+          Resistant = sum(Categorical_Result == "R"),
+          .groups = "drop"
+        ) %>%
+        mutate(
+          Grouping_Variable = group_var,
+          Grouping_Value = if(group_var == "Overall") "Overall" else as.character(.data[[group_var]])
+        )
+    }
+    
+    group_vars <- c("Overall", "REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE")
+    Combined_Summaries <- map_dfr(group_vars, ~calculate_summary(Ecoli_Long, .x))
+    
+    # Final Formatting 
+    Final_Table <- Combined_Summaries %>%
+      rowwise() %>%
+      mutate(
+        Percentage = round((Resistant / Total) * 100, 1),
+        CI_text = if(Grouping_Variable == "Overall") {
+          test <- binom.test(Resistant, Total)
+          paste0(" (", round(test$conf.int[1]*100, 1), "–", round(test$conf.int[2]*100, 1), ")")
+        } else { "" },
+        Display_Value = paste0(Percentage, "% (", Resistant, "/", Total, ")", CI_text)
+      ) %>%
+      ungroup() %>%
+      select(Antimicrobial_substance, Grouping_Value, Display_Value) %>%
+      pivot_wider(names_from = Grouping_Value, values_from = Display_Value) %>%
+      left_join(abx_classes, by = "Antimicrobial_substance") %>%
+      select(Class, Antimicrobial_su  title: "Descriptive analysis of AMR data"
 author: "Madelaine Norström"
 date: "2025-10-14"
 output:
@@ -70,8 +125,9 @@ joined_data <- joined_data %>%
          )
 # Supplementary Table 5
 ## Importing the E.coli_ECOFF_EUCAST break point file
-ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx")
+#ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx")
 
+ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_E.coli_K.pneumoniae.xlsx")
 
 EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
 
@@ -117,76 +173,25 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
       ) %>%
       filter(
         (
-          # Group 1: Standard E. coli
-          grepl("E", Isolate, ignore.case = TRUE) & 
-            grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
-            grepl("Pink|Red", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
-        ) | 
           (
-            # Group 2: Metallic blue isolates that VITEK says are actually E. coli
-            grepl("K", Isolate, ignore.case = TRUE) & 
+            # Group 1: Standard E. coli
+            grepl("E", Isolate, ignore.case = TRUE) & 
               grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
-              grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
-          )
+              grepl("Pink|Red", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
+          ) | 
+            (
+              # Group 2: Metallic blue isolates that VITEK says are actually E. coli
+              grepl("K", Isolate, ignore.case = TRUE) & 
+                grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
+                grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
+            )
+        ) & 
+          # Ceftriaxone breakpoint criterion (< 23 mm)
+          Ceftriaxone < 23
       ) %>%
       distinct(INIKA_ID, .keep_all = TRUE)
     
-    # Pivot and Classify 
-    Ecoli_Long <- Data_Clean %>%
-      pivot_longer(
-        cols = any_of(abx_classes$Antimicrobial_substance),
-        names_to = "Antimicrobial_substance",
-        values_to = "value"
-      ) %>%
-      left_join(EPI_CUTOFF, by = "Antimicrobial_substance") %>%
-      mutate(
-        S_num = as.numeric(str_replace_all(S, "[^0-9.]", "")),
-        R_num = as.numeric(str_replace_all(R, "[^0-9.]", "")),
-        Measured_Zone = as.numeric(str_trim(value)),
-        Categorical_Result = case_when(
-          Measured_Zone >= S_num ~ "S",
-          Measured_Zone <= R_num ~ "R",
-          Measured_Zone > R_num & Measured_Zone < S_num ~ "I",
-          TRUE ~ NA_character_
-        )
-      ) %>%
-      filter(!is.na(Categorical_Result))
-    
-    # Summary Logic 
-    calculate_summary <- function(df, group_var) {
-      group_cols <- if(group_var == "Overall") "Antimicrobial_substance" else c(group_var, "Antimicrobial_substance")
-      df %>%
-        group_by(across(all_of(group_cols))) %>%
-        summarise(
-          Total = n(),
-          Resistant = sum(Categorical_Result == "R"),
-          .groups = "drop"
-        ) %>%
-        mutate(
-          Grouping_Variable = group_var,
-          Grouping_Value = if(group_var == "Overall") "Overall" else as.character(.data[[group_var]])
-        )
-    }
-    
-    group_vars <- c("Overall", "REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE")
-    Combined_Summaries <- map_dfr(group_vars, ~calculate_summary(Ecoli_Long, .x))
-    
-    # Final Formatting 
-    Final_Table <- Combined_Summaries %>%
-      rowwise() %>%
-      mutate(
-        Percentage = round((Resistant / Total) * 100, 1),
-        CI_text = if(Grouping_Variable == "Overall") {
-          test <- binom.test(Resistant, Total)
-          paste0(" (", round(test$conf.int[1]*100, 1), "–", round(test$conf.int[2]*100, 1), ")")
-        } else { "" },
-        Display_Value = paste0(Percentage, "% (", Resistant, "/", Total, ")", CI_text)
-      ) %>%
-      ungroup() %>%
-      select(Antimicrobial_substance, Grouping_Value, Display_Value) %>%
-      pivot_wider(names_from = Grouping_Value, values_from = Display_Value) %>%
-      left_join(abx_classes, by = "Antimicrobial_substance") %>%
-      select(Class, Antimicrobial_substance, Overall, everything()) %>%
+   bstance, Overall, everything()) %>%
       arrange(Class, Antimicrobial_substance)
     
     return(Final_Table)
@@ -240,9 +245,10 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
  
   ## Importing the K.pneumoniae_ECOFF_EUCAST break point file
   
-  Kpn_ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx", sheet = 2)
+  #Kpn_ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx", sheet = 2)
   
-  
+   Kpn_ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_E.coli_K.pneumoniae.xlsx", 
+                                           sheet = "K.pneumoniae_ECOFF_EUCAST")
   Kpn_EPI_CUTOFF<-Kpn_ECOFF_EUCAST_BREAK_POINT
   
   process_kpn_amr_analysis <- function(joined_data, Kpn_EPI_CUTOFF) {
@@ -305,7 +311,10 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
             # Group B: E. coli that are Pinkish/Reddish (but VITEK says Kpn)
             (grepl("E", Isolate, ignore.case = TRUE) & 
                `COLONY MORPHOLOGY ON C3GR` %in% c("Pink", "Pinkish", "Reddish", "Pinkish/Reddish"))
-        )
+        ),
+        
+        # 3. Third-generation cephalosporin susceptibility breakpoint (< 23 mm)
+        Ceftriaxone < 23
       ) |>
       arrange(INIKA_ID, Isolate) |>
       # Ensure unique participants are counted once
@@ -427,17 +436,21 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
     Data_Clean <- joined_data %>%
       filter(
         (
-          # Group 1: Standard E. coli
-          grepl("E", Isolate, ignore.case = TRUE) & 
-            grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
-            grepl("Pink|Red", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
-        ) | 
           (
-            # Group 2: Metallic blue isolates that VITEK says are actually E. coli
-            grepl("K", Isolate, ignore.case = TRUE) & 
+            # Group 1: Standard E. coli
+            grepl("E", Isolate, ignore.case = TRUE) & 
               grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
-              grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
-          )
+              grepl("Pink|Red", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
+          ) | 
+            (
+              # Group 2: Metallic blue isolates that VITEK says are actually E. coli
+              grepl("K", Isolate, ignore.case = TRUE) & 
+                grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
+                grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
+            )
+        ) & 
+          # Ceftriaxone resistance breakpoint criterion (< 23 mm)
+          CRO_ED30 < 23
       ) %>%
       # Use any_of for safety during the select
       select(INIKA_ID, REGION.x, SEASON.x, ORIGIN_OF_SAMPLE, `COLONY MORPHOLOGY ON C3GR`, Isolate,
@@ -580,7 +593,7 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
              # Group B: E. coli that are Pinkish/Reddish (but VITEK says Kpn)
              (grepl("E", Isolate, ignore.case = TRUE) & 
                 `COLONY MORPHOLOGY ON C3GR` %in% c("Pink", "Pinkish", "Reddish", "Pinkish/Reddish"))
-         )
+         ) & Ceftriaxone < 23
        ) |>
        arrange(INIKA_ID, Isolate) |>
        # Ensure unique participants are counted once
@@ -683,7 +696,7 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
            grepl("K", Isolate, ignore.case = TRUE) & 
              grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & 
              grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
-         )
+         ) & Ceftriaxone < 23
      ) %>%
      distinct(INIKA_ID, .keep_all = TRUE)
    
@@ -748,7 +761,7 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
      set_table_properties(layout = "autofit", width = 1) %>% 
      
      theme_booktabs() %>%
-     set_caption(caption = "Table: Resistance Percentages and ZOI Frequency Distribution for ESCR E.coli Isolates (N=152).") %>%
+     set_caption(caption = "Table: Resistance Percentages and ZOI Frequency Distribution for ESCR E.coli Isolates (N=149).") %>%
      
      # Font size 6.5 is the "sweet spot" for many columns on one landscape page
      fontsize(size = 6.5, part = "all") %>%
@@ -793,7 +806,7 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
             `COLONY MORPHOLOGY ON C3GR` == "Metallic blue") |
            (grepl("E", Isolate, ignore.case = TRUE) & 
               `COLONY MORPHOLOGY ON C3GR` %in% c("Pink", "Pinkish", "Reddish", "Pinkish/Reddish"))
-       )
+       ) & Ceftriaxone < 23
      ) %>%
      arrange(INIKA_ID, Isolate) %>%
      distinct(INIKA_ID, .keep_all = TRUE)
@@ -853,7 +866,7 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
    #  3. CREATE COMPACT TABLE 
    final_ESCR_Kpn_table <- Final_Kpn_Formatted %>%
      flextable() %>%
-     set_caption(caption = paste0("Table: Resistance Percentages and ZOI Frequency Distribution for ESCR K. pneumoniae (N=60", nrow(ESCR_Kpn_confirmed), ").")) %>%
+     set_caption(caption = paste0("Table: Resistance Percentages and ZOI Frequency Distribution for ESCR K. pneumoniae (N=58", nrow(ESCR_Kpn_confirmed), ").")) %>%
      theme_vanilla() %>%
      fontsize(size = 7, part = "all") %>%
      padding(padding.top = 1, padding.bottom = 1, padding.left = 0, padding.right = 0, part = "all") %>%
@@ -875,119 +888,86 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
 ################################################################################   
   #Figure 1
    #Drawing a histogram for ESCR E.coli AMR frequency
+   # 1. DATA FILTERING & DEDUPLICATION
+   ESCR_ECO_confirmed <- joined_data %>%
+     rename(any_of(setNames(original_spelling, tested_antibiotics))) %>%
+     filter(
+       # Species Confirmation via VITEK
+       trimws(VITEK_MS_Results) == "Escherichia coli",
+       # Specific Isolate + Morphology logic
+       (
+         (grepl("K", Isolate, ignore.case = TRUE) & `COLONY MORPHOLOGY ON C3GR` == "Metallic blue") |
+           (grepl("E", Isolate, ignore.case = TRUE) & `COLONY MORPHOLOGY ON C3GR` %in% c("Pink", "Pinkish", "Reddish", "Pinkish/Reddish"))
+       ) & `Ceftriaxone` < 23
+     ) %>%
+     arrange(INIKA_ID, Isolate) %>%
+     distinct(INIKA_ID, .keep_all = TRUE)
    
-   #  1. PREPARE DATA FOR PLOTTING 
-   # plot_data <- final_ESCR_ECO_AMR_table %>%
-   #   select(Antimicrobial_substance, Class, Overall) %>%
-   #   mutate(
-   #     # Extract numeric percentage from the "final_ESCR_ECO_AMR_table"string 
-   #     Percentage = as.numeric(str_extract(Overall, "^[0-9.]+")),
-   #     # Shorten long names for the X-axis
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Sulfamethoxazole/Trimethoprim", "SXT"),
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Cefotaxime/ClavulanicAcid", "CTX/CLA"),
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Cefotaxime", "CTX"),
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Ceftriaxone", "CRO")
-   #   )
-   # 
-   # #  2. CREATE THE PLOT 
-   # amr_plot <- ggplot(plot_data, aes(x = reorder(Antimicrobial_substance, -Percentage), 
-   #                                   y = Percentage, fill = Class)) +
-   #   geom_bar(stat = "identity", color = "black", width = 0.7) +
-   #   geom_text(aes(label = paste0(round(Percentage, 1), "%")), vjust = -0.5, size = 3) +
-   #   scale_y_continuous(limits = c(0, 110), breaks = seq(0, 100, 20)) +
-   #   scale_fill_brewer(palette = "Paired") + 
-   #   labs(
-   #     title = "Antimicrobial Resistance Profile: ESCR E. coli (N=152)",
-   #     x = "Antimicrobial Agent",
-   #     y = "Resistance Frequency (%)",
-   #     fill = "Drug Class"
-   #   ) +
-   #   theme_minimal() +
-   #   theme(
-   #     axis.text.x = element_text(angle = 45, hjust = 1, size = 9, face = "bold"),
-   #     legend.position = "bottom",
-   #     legend.title = element_text(face = "bold"),
-   #     panel.grid.major.x = element_blank()
-   #   )
-   # 
-   # # 3. SAVE TO WORD 
-   # if(!dir.exists("Results")) dir.create("Results")
-   # 
-   # # Save high-res PNG
-   # plot_file <- "Results/amr_histogram.png"
-   # ggsave(plot_file, plot = amr_plot, width = 8, height = 5, dpi = 300)
-   # 
-   # # Build Word Doc using universal officer functions
-   # doc <- read_docx() %>%
-   #   # Use body_add_fpar for a manual heading (bold, size 14)
-   #   body_add_fpar(fpar(ftext("Figure: Antimicrobial Resistance Distribution", 
-   #                            fp_text(font.size = 14, bold = TRUE)))) %>%
-   #   body_add_par("") %>% # Add a blank line
-   #   body_add_img(src = plot_file, width = 6.5, height = 4) %>%
-   #   body_add_par("") %>% 
-   #   body_add_par("Figure 1. Frequency of resistance among confirmed ESCR E. coli isolates.", 
-   #                style = "Normal")
-   # 
-   # # Save the file
-   # print(doc, target = "Results/Ecoli_Resistance_Final_Plot.docx")
-   # 
-   # # Clean up
-   # if(file.exists(plot_file)) file.remove(plot_file)
-   # 
-   # cat("Success! Your plot has been saved to 'Results/Ecoli_Resistance_Final_Plot.docx'")
-   # 
-################################################################################   
-   #Figure 1
-   #Drawing a histogram for ESCR E.coli AMR frequency
-   # DATA PROCESSING 
-   ESCR_long <- ESCR_confirmed_data %>% 
-     pivot_longer(cols = any_of(tested_antibiotics), 
-                  names_to = "Antimicrobial_substance", 
-                  values_to = "mm") %>%
+   # 2. LONG TRANSFORM & RESISTANCE CALCULATION
+   ESCR_long <- ESCR_ECO_confirmed %>% 
+     pivot_longer(
+       cols = any_of(tested_antibiotics), 
+       names_to = "Antimicrobial_substance", 
+       values_to = "mm"
+     ) %>%
      filter(!is.na(mm)) %>%
+     mutate(
+       # String cleaning before numeric conversion
+       mm = as.numeric(str_trim(as.character(mm)))
+     ) %>%
      left_join(EPI_CUTOFF, by = "Antimicrobial_substance") %>%
      mutate(
-       mm = as.numeric(str_trim(mm)),
-       R_limit = as.numeric(str_replace_all(R, "[^0-9.]", "")),
-       is_resistant = ifelse(mm <= R_limit, 1, 0)
+       R_limit = as.numeric(str_replace_all(as.character(R), "[^0-9.]", "")),
+       is_resistant = if_else(mm <= R_limit, 1, 0, missing = 0)
      )
    
+   # 3. GROUP SUMMARY & EXACT 95% CIs
    Summary_Resistance <- ESCR_long %>%
      group_by(Antimicrobial_substance) %>%
      summarise(
        N = n(),
        R_count = sum(is_resistant, na.rm = TRUE),
        Prop = R_count / N,
-       Lower = binom.test(R_count, N)$conf.int[1] * 100,
-       Upper = binom.test(R_count, N)$conf.int[2] * 100,
        .groups = "drop"
      ) %>%
-     filter(Prop > 0)
+     filter(Prop > 0) %>%
+     # Safe vectorized confidence interval calculation using purrr
+     mutate(
+       ci = map2(R_count, N, ~ binom.test(.x, .y)$conf.int * 100),
+       Lower = map_dbl(ci, 1),
+       Upper = map_dbl(ci, 2)
+     ) %>%
+     select(-ci)
    
-   # GENERATE REFINED PLOT 
-   AMR_CI_Plot <- ggplot(Summary_Resistance, 
-                         aes(x = reorder(Antimicrobial_substance, Prop), 
-                             y = Prop * 100, 
-                             fill = Antimicrobial_substance)) + 
+   # 4. GENERATE REFINED PLOT
+   AMR_CI_Plot <- ggplot(
+     Summary_Resistance, 
+     aes(
+       x = reorder(Antimicrobial_substance, Prop), 
+       y = Prop * 100, 
+       fill = Antimicrobial_substance
+     )
+   ) + 
      geom_col(color = "black", alpha = 0.9, width = 0.7, show.legend = FALSE) +
-     geom_errorbar(aes(ymin = Lower, ymax = Upper), 
-                   width = 0.25, color = "gray20", linewidth = 0.7) +
-     # Conditional positioning: 
-     # If Florfenicol, hjust = -0.5 (outside) and color = black
-     # Else, hjust = 1.2 (inside) and color = white
-     geom_text(aes(
-       label = sprintf("%.1f%%", Prop * 100),
-       hjust = ifelse(Antimicrobial_substance == "Florfenicol", -0.5, 1.2),
-       color = ifelse(Antimicrobial_substance == "Florfenicol", "black", "white")
-     ), size = 3.5, fontface = "bold") +
-     # Map the identity of colors so the manual "white" and "black" strings work
+     geom_errorbar(
+       aes(ymin = Lower, ymax = Upper), 
+       width = 0.25, color = "gray20", linewidth = 0.7
+     ) +
+     geom_text(
+       aes(
+         label = sprintf("%.1f%%", Prop * 100),
+         hjust = if_else(Antimicrobial_substance == "Florfenicol", -0.5, 1.2),
+         color = if_else(Antimicrobial_substance == "Florfenicol", "black", "white")
+       ), 
+       size = 3.5, fontface = "bold"
+     ) +
      scale_color_identity() +
      coord_flip() + 
      scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10)) +
      labs(
        title = "Resistance Percentage (%)",
-       x = " ",
-       y = " "
+       x = NULL,
+       y = NULL
      ) +
      theme_minimal(base_size = 12) +
      theme(
@@ -996,8 +976,9 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
        axis.text.y = element_text(face = "bold")
      )
    
-   # SAVE AND EXPORT
-   if(!dir.exists("Results")) dir.create("Results")
+   # 5. SAVE AND EXPORT TO WORD
+   if (!dir.exists("Results")) dir.create("Results")
+   
    ggsave("Results/Resistance_Refined_Plot.png", plot = AMR_CI_Plot, width = 9, height = 6, dpi = 300)
    
    doc <- read_docx() %>%
@@ -1005,70 +986,6 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
    
    print(doc, target = "Results/ESCR_AMR_Refined_Histogram.docx")
 ################################################################################   
-     # Figure 2
-   # Drawing a histogram for ESCR K.pneumoniae AMR frequency
-   
-   #  1. PREPARE DATA FOR PLOTTING 
-   # Extracting numeric percentages from "kpn_amr_final_results" strings
-   # kpn_plot_data <- kpn_amr_final_results %>%
-   #   select(Antimicrobial_substance, Class, Overall) %>%
-   #   mutate(
-   #     # Extract the percentage number from the start of the "Overall" string
-   #     Percentage = as.numeric(str_extract(Overall, "^[0-9.]+")),
-   #     # Shorten long names for the X-axis to prevent overlap
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Sulfamethoxazole/Trimethoprim", "SXT"),
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Cefotaxime/ClavulanicAcid", "CTX/CLA"),
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Cefotaxime", "CTX"),
-   #     Antimicrobial_substance = str_replace(Antimicrobial_substance, "Ceftriaxone", "CRO")
-   #   )
-   # 
-   # #  2. CREATE THE PLOT 
-   # kpn_amr_plot <- ggplot(kpn_plot_data, aes(x = reorder(Antimicrobial_substance, -Percentage), 
-   #                                           y = Percentage, fill = Class)) +
-   #   geom_bar(stat = "identity", color = "black", width = 0.7) +
-   #   geom_text(aes(label = paste0(round(Percentage, 1), "%")), vjust = -0.5, size = 3) +
-   #   scale_y_continuous(limits = c(0, 110), breaks = seq(0, 100, 20)) +
-   #   scale_fill_brewer(palette = "Paired") + 
-   #   labs(
-   #     title = "Antimicrobial Resistance Profile: ESCR K. pneumoniae (N=60)",
-   #     x = "Antimicrobial Agent",
-   #     y = "Resistance Frequency (%)",
-   #     fill = "Drug Class"
-   #   ) +
-   #   theme_minimal() +
-   #   theme(
-   #     axis.text.x = element_text(angle = 45, hjust = 1, size = 9, face = "bold"),
-   #     legend.position = "bottom",
-   #     legend.title = element_text(face = "bold"),
-   #     panel.grid.major.x = element_blank()
-   #   )
-   # 
-   # # 3. SAVE TO WORD DOC
-   # if(!dir.exists("Results")) dir.create("Results")
-   # 
-   # # Save high-res PNG for the doc
-   # kpn_plot_file <- "Results/kpn_amr_histogram.png"
-   # ggsave(kpn_plot_file, plot = kpn_amr_plot, width = 8, height = 5, dpi = 300)
-   # 
-   # # Build Word Doc using universal officer functions
-   # doc_kpn <- read_docx() %>%
-   #   body_add_fpar(fpar(ftext("Figure: K. pneumoniae Antimicrobial Resistance Distribution", 
-   #                            fp_text(font.size = 14, bold = TRUE)))) %>%
-   #   body_add_par("") %>% 
-   #   body_add_img(src = kpn_plot_file, width = 6.5, height = 4) %>%
-   #   body_add_par("") %>% 
-   #   body_add_par("Figure 2. Frequency of resistance among confirmed ESCR K. pneumoniae isolates (N=60).", 
-   #                style = "Normal")
-   # 
-   # # Save the file
-   # print(doc_kpn, target = "Results/Kpn_Resistance_Final_Plot.docx")
-   # 
-   # # Clean up temp image
-   # if(file.exists(kpn_plot_file)) file.remove(kpn_plot_file)
-   # 
-   # cat("Success! Your K. pneumoniae plot has been saved to 'Results/Kpn_Resistance_Final_Plot.docx'")
-   
-###################################################  
    # Figure 2
    # Drawing a histogram for ESCR K.pneumoniae AMR frequency
     # DATA PREP  
@@ -1081,7 +998,7 @@ EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
        (
          (grepl("K", Isolate, ignore.case = TRUE) & `COLONY MORPHOLOGY ON C3GR` == "Metallic blue") |
            (grepl("E", Isolate, ignore.case = TRUE) & `COLONY MORPHOLOGY ON C3GR` %in% c("Pink", "Pinkish", "Reddish", "Pinkish/Reddish"))
-       )
+       ) & Ceftriaxone < 23
      ) %>%
      arrange(INIKA_ID, Isolate) %>%
      distinct(INIKA_ID, .keep_all = TRUE)
