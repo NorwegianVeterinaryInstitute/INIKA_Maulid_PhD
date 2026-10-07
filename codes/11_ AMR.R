@@ -54,14 +54,14 @@ spec(joined_data)
 
 # Step 1–5: Prepare the frequency table
 df_freq_wide <- joined_data %>%
-  select(INIKA_ID.x,REGION.x,ORIGIN_OF_SAMPLE.x,Isolate.x,VITEK_MS_Results, ESBL_Selection, ESBL,
+  select(INIKA_ID,REGION,ORIGIN_OF_SAMPLE,Isolate,VITEK_MS_Results, ESBL_Selection, ESBL,PROTOCOL,
          AMX_ED10,AZM_ED15,CRO_ED30,CIP_ED5,DOX_ED30,FLR_ED30,
          GEN_ED10,MEM_ED10,OXY_ED30,POL_ED300,SXT_ED1_2,
          CTX_ED5,CTC_ED30)%>%
 
-  mutate(across(-c(VITEK_MS_Results, Isolate.x, ESBL), as.character)) %>%
+  mutate(across(-c(VITEK_MS_Results, Isolate, ESBL), as.character)) %>%
   pivot_longer(
-    cols = -c(VITEK_MS_Results, Isolate.x, ESBL),
+    cols = -c(VITEK_MS_Results, Isolate, ESBL),
     names_to = "substance_name",
     values_to = "value"
   ) %>%

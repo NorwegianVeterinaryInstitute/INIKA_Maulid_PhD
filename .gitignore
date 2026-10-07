@@ -1,6 +1,13 @@
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
+*.Rproj
 desktop.ini
+*.Rhistory
+.RData
+.Rproj.user
+.Ruserdata
+Codes_copy_Madelaine
 data/
+Tables and Figures
+Cleaned_data/
+Results/
+OLD_Files_different_types
+codes/renv

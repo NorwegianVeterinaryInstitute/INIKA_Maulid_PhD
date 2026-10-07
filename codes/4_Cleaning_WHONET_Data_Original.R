@@ -10,8 +10,39 @@ library(systemfonts)
 
 # Madelaine checked, seems ok 17.10 
 
+#getwd()
+
+
+
+#list.files()
+
+
+
+#list.files(recursive = TRUE)
+
 ## Importing the original WHONET DATA
+
 WHONET_DATA_9_9_2025 <- read_excel("data/WHONET DATA_9_9_2025.xlsx")
+
+
+
+# 08.09.26 I make a test below to see how much change it will be and it is quite a few! that then ( NOW) will be defined as ESCR!TestESCR <- WHONET_DATA_9_9_2025 %>%
+
+TestESCR <- WHONET_DATA_9_9_2025 %>%
+  
+mutate(
+  
+  CTC_ED30 = as.numeric(as.character(CTC_ED30)),
+  
+  CTX_ED5 = as.numeric(as.character(CTX_ED5)),
+  
+  CRO_ED30 = as.numeric(as.character(CRO_ED30))
+  
+) %>%
+  
+filter(CRO_ED30 < 23)
+
+# Note there are more isoaltes that now will be defined as ESCR as previously!
 
 
 ## Looking at the data structure ----
@@ -67,7 +98,7 @@ WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
 
 #MMJ 6/12/2025
 # We have detected that, "22131_2_D" has mislabeled, instead of "22131_1_D" the one selected for AST
-# Solution: We re write this number accordingly
+# Solution: We  write this number accordingly
 WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
   mutate(Isolate_ID = case_when(
     Isolate_ID == "22131_2_D" ~ "22131_1_D",
@@ -92,27 +123,78 @@ WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
 # Madelaine corrected 26.11 below! Note I have new names on the variables so we need to change throughout the scripts to ensure it works
 
 # Note I have renamed this outputfile to remian the same name! Yu don't need a new file here!
+##### 08.09.26 !!!!!!!!!!!!!! Here you need to make a change in the coding ONLY CRO_ED30 will be defined as ESCR organisms
+#WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
+ # mutate(
+ #   ESCR_ECO_presumptive = case_when(
+  #    #ORGANISM == "eco" & CTX_ED5  < 22 ~ 1,
+  #    ORGANISM == "eco" & CRO_ED30 < 23  ~ 1,
+   #   TRUE ~ 0
+   # ),
+ #   ESCR_KPN_presumptive = case_when(
+  #    #ORGANISM == "kpn" & CTX_ED5 < 21 ~ 1,
+   #   ORGANISM == "kpn" & CRO_ED30 < 23  ~ 1,
+   #   TRUE ~ 0
+  #  ),
+  #  ESBL_Presumptivefinal = case_when(
+  #    (ESCR_KPN_presumptive == 1 | ESCR_ECO_presumptive == 1) & ESBL_Selection >= 5 ~ 1,
+  #    TRUE ~ 0
+  #  )
+ # )
 
-WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
+
+
+
+#180#####
+# WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
+#   mutate(
+#     ESCR_ECO_presumptive = case_when(
+#       PROTOCOL=="CGR3"& 
+#       ORGANISM == "eco" & CRO_ED30 < 23  ~ 1,
+#       TRUE ~ 0
+#     ),
+#     ESCR_KPN_presumptive = case_when(
+#       PROTOCOL=="CGR3"& 
+#       ORGANISM == "kpn" & CRO_ED30 < 23  ~ 1,
+#       TRUE ~ 0
+#     ),
+#     ESBL_Presumptivefinal = case_when(
+#       (ESCR_KPN_presumptive == 1 | ESCR_ECO_presumptive == 1) & ESBL_Selection >= 5 ~ 1,
+#       TRUE ~ 0
+#     )
+#   )
+# 
+# ESCR_ECO_presumptive<-WHONET_Cleaned_data %>%
+#   filter(ESCR_ECO_presumptive==1)
+# View(ESCR_ECO_presumptive)
+# # In total 44 ESCR Eco
+# ESCR_KPN_presumptive<-WHONET_Cleaned_data %>%
+#   filter(ESCR_KPN_presumptive==1)
+# View(ESCR_KPN_presumptive)
+# # In total 70 ESCR KPN
+# 
+# ESBL_Presumptivefinal<-WHONET_Cleaned_data %>%
+#   filter(ESBL_Presumptivefinal==1)
+# # In total 50 ESBL presumptive
+# # 25 ECO and 25 KPN
+
+WHONET_Cleaned_data<- WHONET_Cleaned_data %>%
   mutate(
-    ESCR_ECO_presumptive = case_when(
-      ORGANISM == "eco" & CTX_ED5  < 22 ~ 1,
-      ORGANISM == "eco" & CRO_ED30 < 23  ~ 1,
-      TRUE ~ 0
-    ),
-    ESCR_KPN_presumptive = case_when(
-      ORGANISM == "kpn" & CTX_ED5 < 21 ~ 1,
-      ORGANISM == "kpn" & CRO_ED30 < 23  ~ 1,
-      TRUE ~ 0
-    ),
-    ESBL_Presumptivefinal = case_when(
-      (ESCR_KPN_presumptive == 1 | ESCR_ECO_presumptive == 1) & ESBL_Selection >= 5 ~ 1,
-      TRUE ~ 0
+    ESBL_Presumptivefinal = if_else(
+      CRO_ED30 < 23 & 
+        str_detect(PROTOCOL, regex("^CGR3$", ignore_case = TRUE)) & 
+        ESBL_Selection >= 5,
+      1,
+      0
     )
   )
 
+WHONET_Cleaned_data_ESBL<-WHONET_Cleaned_data %>%
+  filter(ESBL_Presumptivefinal==1)
 
-# In total 190 ESCR Eco ( Presumptive), 170 ESBL Eco ( Presumptive), 148 ESCR K.Pneumoniae (Presumptive), 99 ESBL K.Pneumoinae ( Presumoptive),
+#ESBL_KPN_Presumptivefinal<-ESBL_Presumptivefinal%>%
+ # filter(ORGANISM == "kpn)
+# THe following is not true if we need to rely on the ceftriaxone results only!; In total 190 ESCR Eco ( Presumptive), 170 ESBL Eco ( Presumptive), 148 ESCR K.Pneumoniae (Presumptive), 99 ESBL K.Pneumoinae ( Presumoptive),
 
 
 
@@ -122,13 +204,13 @@ WHONET_Cleaned_data <- WHONET_Cleaned_data %>%
   
 
 
-#26.11.25 Check have not written out the files again # before the write commands
+
 # Saving the file as tsv
-#write_tsv(WHONET_Cleaned_data, "data/CLEANED_DATA/4_WHONET_Cleaned_data-2025-10-08.tsv")
+write_tsv(WHONET_Cleaned_data, "data/CLEANED_DATA/4_WHONET_Cleaned_data-2026-09-21.tsv")
 
 # Exporting the file as rds
-#saveRDS(WHONET_Cleaned_data,"data/CLEANED_DATA/4_WHONET_Cleaned_data-2025-10-08.rds")
+saveRDS(WHONET_Cleaned_data,"data/CLEANED_DATA/4_WHONET_Cleaned_data-2026-09-21.rds")
 
-#write.csv(WHONET_Cleaned_data_ESBL,"data/CLEANED_DATA/WHONET_Cleaned_data_ESBL.csv")
+write.csv(WHONET_Cleaned_data_ESBL,"data/CLEANED_DATA/WHONET_Cleaned_data_ESBL.csv")
 #################################################################################
 

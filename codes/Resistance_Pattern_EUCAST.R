@@ -44,19 +44,8 @@ Ecoli_ECOFF_EUCAST_BREAK_POINT <- read_excel(
 
 Ecoli_EPI_CUTOFF <- Ecoli_ECOFF_EUCAST_BREAK_POINT
 
-# Kpn_ECOFF_EUCAST_BREAK_POINT <- read_excel(
-#   "data/ECOFF_E.coli_K.pneumoniae.xlsx",
-#   sheet = 2
-# )
-# 
-# Kpn_EPI_CUTOFF <- Kpn_ECOFF_EUCAST_BREAK_POINT
-# 
-# 
-# ECOFF_EUCAST_BREAK_POINT <- read_excel(
-#   "data/ECOFF_E.coli_K.pneumoniae.xlsx"
-# )
-# 
-#EPI_CUTOFF <- ECOFF_EUCAST_BREAK_POINT
+
+
 #Import ECOFF table with the sheet for Klebsiella
 Kpn_ECOFF_EUCAST_BREAK_POINT <- read_excel(
   "data/ECOFF_E.coli_K.pneumoniae.xlsx",
@@ -88,7 +77,7 @@ Kpn_EPI_CUTOFF <- Kpn_EPI_CUTOFF %>%
 # Supplementary Table 5
 #################################
 # Define the list of grouping variables (Only defined ONCE here)
-group_vars_list <- c("REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE")
+group_vars_list <- c("ORIGIN_OF_SAMPLE", "REGION.x", "SEASON.x")
 
 # 1. Define Antibiotic Class Mapping 
 # This ensures drugs are grouped by their mechanism of action in your table
@@ -110,6 +99,8 @@ abx_classes <- tribble(
   "Sulfamethoxazole/Trimethoprim",   "Sulfonamides"
 )
 
+abx_cols <- abx_classes$Antimicrobial_substance
+
 
 #Used later for: MDR calculation and Table grouping
 #Step 3: Define ESCR E. coli
@@ -118,7 +109,7 @@ process_ecoli_amr_results <- function(joined_data, Ecoli_EPI_CUTOFF) {
   
   # Cleaning and Filtering 
   
-  abx_cols <- abx_classes$Antimicrobial_substance
+
   
   Data_Clean <- joined_data %>%
     select(
@@ -206,7 +197,7 @@ process_ecoli_amr_results <- function(joined_data, Ecoli_EPI_CUTOFF) {
       )
   }
   
-  group_vars <- c("Overall", "REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE")
+  group_vars <- c("Overall", "ORIGIN_OF_SAMPLE", "REGION.x", "SEASON.x")
   Combined_Summaries <- map_dfr(group_vars, ~calculate_summary(Ecoli_Long, .x))
   
   # Final Formatting 
@@ -370,7 +361,7 @@ message(paste("Isolates processed:", nrow(cleaned_data)))
   }
   
   # Generate and Format Final Table
-  group_vars <- c("Overall", "REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE")
+  group_vars <- c("Overall", "ORIGIN_OF_SAMPLE", "REGION.x", "SEASON.x")
   
   final_tablekpn <- map_dfr(group_vars, ~get_summary(kpn_long, .x)) |>
     rowwise() |>
@@ -987,7 +978,331 @@ save_as_docx(
 ##############################################################################
 ##############################################################################
 # Supplementary Table 3
-# Distribution of Zone Diameters and Resistance Frequency in ESCR E. coli
+# Distr##############################################################################
+# Computing the AMR for confirmed CR Escherichia coli
+##############################################################################
+
+process_cr_ecoli_amr_results <- function(
+    joined_data,
+    Ecoli_EPI_CUTOFF
+) {
+  
+  ###########################################################################
+  # Clean, confirm species and filter CR E. coli
+  ###########################################################################
+  
+  Data_Clean <- joined_data %>%
+    select(
+      INIKA_ID,
+      ORIGIN_OF_SAMPLE,
+      SEASON.x,
+      REGION.x,
+      DISTRICT.x,
+      `COLONY MORPHOLOGY ON CARBA`,
+      VITEK_MS_Results,
+      Isolate,
+      Isolate_NVI,
+      AMX_ED10,
+      AZM_ED15,
+      CRO_ED30,
+      CIP_ED5,
+      DOX_ED30,
+      FLR_ED30,
+      GEN_ED10,
+      MEM_ED10,
+      OXY_ED30,
+      POL_ED300,
+      SXT_ED1_2,
+      CTX_ED5,
+      CTC_ED30
+    ) %>%
+    rename_antibiotics() %>%
+    convert_antibiotics() %>%
+    rename(
+      SEASON = SEASON.x,
+      REGION = REGION.x,
+      DISTRICT = DISTRICT.x
+    ) %>%
+    mutate(
+      is_nvi_ecoli = str_detect(
+        coalesce(Isolate_NVI, ""),
+        "(?i)E\\.?\\s*coli|Escherichia\\s+coli|^E$"
+      ),
+      
+      CONFIRMED_SPECIES = case_when(
+        is_nvi_ecoli ~ "CR Escherichia coli",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(
+      CONFIRMED_SPECIES == "CR Escherichia coli",
+      str_detect(
+        coalesce(`COLONY MORPHOLOGY ON CARBA`, ""),
+        "(?i)Red|Pinkish|Pink|Metalic blue"
+      )
+    ) %>%
+    distinct(
+      INIKA_ID,
+      .keep_all = TRUE
+    )
+  
+  message(
+    sprintf(
+      "Total confirmed CR E. coli unique isolates processed: %d",
+      nrow(Data_Clean)
+    )
+  )
+  
+  ###########################################################################
+  # Long-format susceptibility data
+  ###########################################################################
+  
+  Ecoli_Long <- Data_Clean %>%
+    pivot_longer(
+      cols = any_of(abx_classes$Antimicrobial_substance),
+      names_to = "Antimicrobial_substance",
+      values_to = "value"
+    ) %>%
+    left_join(
+      Ecoli_EPI_CUTOFF,
+      by = "Antimicrobial_substance"
+    ) %>%
+    mutate(
+      S_num = as.numeric(
+        str_replace_all(S, "[^0-9.]", "")
+      ),
+      R_num = as.numeric(
+        str_replace_all(R, "[^0-9.]", "")
+      ),
+      Measured_Zone = as.numeric(
+        str_trim(value)
+      ),
+      Categorical_Result = case_when(
+        Measured_Zone >= S_num ~ "S",
+        Measured_Zone <= R_num ~ "R",
+        Measured_Zone > R_num &
+          Measured_Zone < S_num ~ "I",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(
+      !is.na(Categorical_Result)
+    )
+  
+  ###########################################################################
+  # Summary helper
+  ###########################################################################
+  
+  calculate_summary <- function(
+    df,
+    group_var
+  ) {
+    
+    group_cols <-
+      if (group_var == "Overall") {
+        "Antimicrobial_substance"
+      } else {
+        c(
+          group_var,
+          "Antimicrobial_substance"
+        )
+      }
+    
+    df %>%
+      group_by(
+        across(
+          all_of(group_cols)
+        )
+      ) %>%
+      summarise(
+        Total = n(),
+        Resistant = sum(
+          Categorical_Result == "R"
+        ),
+        .groups = "drop"
+      ) %>%
+      mutate(
+        Grouping_Variable = group_var,
+        Grouping_Value =
+          if (group_var == "Overall") {
+            "Overall"
+          } else {
+            as.character(
+              .data[[group_var]]
+            )
+          }
+      )
+  }
+  
+  ###########################################################################
+  # Generate summaries
+  ###########################################################################
+  
+  group_vars <- c(
+    "Overall",
+    "ORIGIN_OF_SAMPLE",
+    "REGION",
+    "SEASON"
+  )
+  
+  Combined_Summaries <- map_dfr(
+    group_vars,
+    ~ calculate_summary(
+      Ecoli_Long,
+      .x
+    )
+  )
+  
+  ###########################################################################
+  # Final table
+  ###########################################################################
+  
+  Final_Table <- Combined_Summaries %>%
+    rowwise() %>%
+    mutate(
+      Percentage = round(
+        (Resistant / Total) * 100,
+        1
+      ),
+      
+      CI_text =
+        if (Grouping_Variable == "Overall") {
+          
+          test <- binom.test(
+            Resistant,
+            Total
+          )
+          
+          paste0(
+            " (",
+            round(
+              test$conf.int[1] * 100,
+              1
+            ),
+            "–",
+            round(
+              test$conf.int[2] * 100,
+              1
+            ),
+            ")"
+            
+          )
+          
+        } else {
+          
+          ""
+          
+        },
+      
+      Display_Value =
+        paste0(
+          Percentage,
+          "% (",
+          Resistant,
+          "/",
+          Total,
+          ")",
+          CI_text
+        )
+    ) %>%
+    ungroup() %>%
+    select(
+      Antimicrobial_substance,
+      Grouping_Value,
+      Display_Value
+    ) %>%
+    pivot_wider(
+      names_from = Grouping_Value,
+      values_from = Display_Value
+    ) %>%
+    left_join(
+      abx_classes,
+      by = "Antimicrobial_substance"
+    ) %>%
+    select(
+      Class,
+      Antimicrobial_substance,
+      Overall,
+      everything()
+    ) %>%
+    arrange(
+      Class,
+      Antimicrobial_substance
+    )
+  
+  Final_Table
+}
+
+##############################################################################
+# Run analysis
+##############################################################################
+
+final_CR_ECO_AMR_table <- process_cr_ecoli_amr_results(
+  joined_data,
+  Ecoli_EPI_CUTOFF
+)
+
+##############################################################################
+# Export Excel
+##############################################################################
+
+write_xlsx(
+  final_CR_ECO_AMR_table,
+  "Results/CR_Ecoli_AMR_Resistance_Table.xlsx"
+)
+
+##############################################################################
+# Export Word
+##############################################################################
+
+ft_compact <- flextable(
+  final_CR_ECO_AMR_table
+) %>%
+  theme_booktabs() %>%
+  autofit() %>%
+  fontsize(
+    size = 8,
+    part = "all"
+  ) %>%
+  padding(
+    padding = 1,
+    part = "all"
+  ) %>%
+  merge_v(
+    j = ~ Class
+  ) %>%
+  bold(
+    part = "header"
+  ) %>%
+  set_table_properties(
+    layout = "fixed"
+  ) %>%
+  width(
+    width = 1.1
+  ) %>%
+  width(
+    j = 1:2,
+    width = 1.5
+  )
+
+sect_properties <- prop_section(
+  page_size = page_size(
+    orient = "landscape"
+  ),
+  page_margins = page_mar(
+    bottom = 0.5,
+    top = 0.5,
+    right = 0.5,
+    left = 0.5
+  ),
+  type = "continuous"
+)
+
+save_as_docx(
+  ft_compact,
+  path = "Results/CR_Ecoli_AMR_Results_Final_Fit.docx",
+  pr_section = sect_properties
+)ibution of Zone Diameters and Resistance Frequency in ESCR E. coli
 ##############################################################################
 
 ##############################################################################
@@ -1873,4 +2188,1066 @@ doc <- read_docx() %>%
 print(
   doc,
   target = "Results/ESCR_Kpn_AMR_Refined_Histogram.docx"
+)
+################################################################################
+# ## Computing for ESBL count
+# # 1. Create 'Results' folder if it does not exist
+# if (!dir.exists("Results")) {
+#   dir.create("Results")
+# }
+# 
+# # Helper function: formats n (%) to 1 decimal place, stripping '.0' for whole numbers
+# fmt_n_pct <- function(n, total) {
+#   if (total == 0) return("0 (0%)")
+#   pct <- (n / total) * 100
+#   pct_str <- sub("\\.0$", "", sprintf("%.1f", pct)) # Replaces .0 with empty string
+#   sprintf("%d (%s%%)", n, pct_str)
+# }
+# # General summarizer for Origin, Season, and Region
+# summarize_variable <- function(df, var_col, var_label) {
+#   var_sym <- sym(var_col)
+#   
+#   df %>%
+#     filter(!is.na(!!var_sym)) %>%
+#     group_by(Values = as.character(!!var_sym)) %>%
+#     summarise(
+#       n_ecoli = sum(Species_Group == "E. coli", na.rm = TRUE),
+#       n_kpneumo = sum(Species_Group == "K. pneumoniae", na.rm = TRUE),
+#       .groups = "drop"
+#     ) %>%
+#     mutate(
+#       `ESBL E. coli` = map2_chr(n_ecoli, total_ecoli, fmt_n_pct),
+#       `ESBL K. pneumoniae` = map2_chr(n_kpneumo, total_kpneumo, fmt_n_pct),
+#       Variable = var_label
+#     ) %>%
+#     select(Variable, Values, `ESBL E. coli`, `ESBL K. pneumoniae`)
+# }
+# # Dedicated District summarizer sorted by Region (Kilimanjaro -> Mwanza), then District alphabetically
+# summarize_districts <- function(df, district_col, region_col) {
+#   dist_sym <- sym(district_col)
+#   reg_sym <- sym(region_col)
+#   
+#   df %>%
+#     filter(!is.na(!!dist_sym), !is.na(!!reg_sym)) %>%
+#     group_by(Region = as.character(!!reg_sym), District = as.character(!!dist_sym)) %>%
+#     summarise(
+#       n_ecoli = sum(Species_Group == "E. coli", na.rm = TRUE),
+#       n_kpneumo = sum(Species_Group == "K. pneumoniae", na.rm = TRUE),
+#       .groups = "drop"
+#     ) %>%
+#     # Order Region so Kilimanjaro comes first, Mwanza second
+#     mutate(Region = factor(Region, levels = c("Kilimanjaro", "Mwanza"))) %>%
+#     # Sort by Region order, then District name alphabetically
+#     arrange(Region, District) %>%
+#     mutate(
+#       `ESBL E. coli` = map2_chr(n_ecoli, total_ecoli, fmt_n_pct),
+#       `ESBL K. pneumoniae` = map2_chr(n_kpneumo, total_kpneumo, fmt_n_pct),
+#       Variable = "District",
+#       Values = District
+#     ) %>%
+#     select(Variable, Values, `ESBL E. coli`, `ESBL K. pneumoniae`)
+# }
+# # 2. Filter dataset for presumptive ESBL positives & deduplicate by unique INIKA_ID
+# # Define species filtering conditions and deduplicate
+# esbl_data <- joined_data %>%
+#   rename(
+#     Amoxicillin = AMX_ED10,
+#     Azithromycin = AZM_ED15,
+#     Ceftriaxone = CRO_ED30,
+#     Ciprofloxacin = CIP_ED5,
+#     Doxycycline = DOX_ED30,
+#     Florfenicol = FLR_ED30,
+#     Gentamicin = GEN_ED10,
+#     Meropenem = MEM_ED10,
+#     Oxytetracycline = OXY_ED30,
+#     `Polymyxin_B(PB)` = POL_ED300,
+#     `Sulfamethoxazole/Trimethoprim` = SXT_ED1_2,
+#     Cefotaxime = CTX_ED5,
+#     `Cefotaxime/Clavulanic Acid` = CTC_ED30) %>%
+#   mutate(across(all_of(abx_cols), ~ as.numeric(trimws(.)))) %>%
+#   # Basic phenotypic resistance criteria
+#   filter( `Cefotaxime/Clavulanic Acid`- Cefotaxime >= 5,
+#     #ESBL == 1,
+#     Ceftriaxone < 23 
+#   ) %>%
+# 
+#   # Apply strict microbiological identification & chromogenic colony rules
+#   filter(
+#     # Condition A: E. coli Rules 
+#     (
+#       (
+#         grepl("E", Isolate, ignore.case = TRUE) &
+#           grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) &
+#           grepl("Pink|Red", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
+#       ) |
+#         (
+#           grepl("K", Isolate, ignore.case = TRUE) &
+#             grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) &
+#             grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)
+#         )
+#     ) |
+#       # Condition B: K. pneumoniae Rule 
+#       (
+#         trimws(VITEK_MS_Results) == "Klebsiella pneumoniae"
+#       )
+#   ) %>%
+#   # Assign definitive Species_Group for table aggregation
+#   mutate(
+#     Species_Group = case_when(
+#       grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) ~ "E. coli",
+#       trimws(VITEK_MS_Results) == "Klebsiella pneumoniae" ~ "K. pneumoniae",
+#       TRUE ~ NA_character_
+#     )
+#   ) %>%
+#   # Sort deterministically and retain unique INIKA_ID
+#   arrange(INIKA_ID, Isolate) %>%
+#   distinct(INIKA_ID, .keep_all = TRUE)
+# 
+# # Print logging summary messages to console
+# n_ecoli <- sum(esbl_data$Species_Group == "E. coli", na.rm = TRUE)
+# n_kpneumo <- sum(esbl_data$Species_Group == "K. pneumoniae", na.rm = TRUE)
+# n_total <- nrow(esbl_data)
+# 
+# message(sprintf("ESCR E. coli isolates retained: %d", n_ecoli))
+# message(sprintf("ESBL K. pneumoniae isolates retained: %d", n_kpneumo))
+# message(sprintf("Total unique isolates processed: %d", n_total))
+# # Compute total counts per species across unique INIKA_ID
+# total_ecoli <- sum(esbl_data$Species_Group == "E. coli")
+# total_kpneumo <- sum(esbl_data$Species_Group == "K. pneumoniae")
+# 
+# # Helper function to summarize species distributions per variable category
+# summarize_variable <- function(df, var_col, var_label) {
+#   var_sym <- sym(var_col)
+#   
+#   df %>%
+#     filter(!is.na(!!var_sym)) %>%
+#     group_by(Values = as.character(!!var_sym)) %>%
+#     summarise(
+#       n_ecoli = sum(Species_Group == "E. coli"),
+#       n_kpneumo = sum(Species_Group == "K. pneumoniae"),
+#       .groups = "drop"
+#     ) %>%
+#     mutate(
+#       `ESBL E. coli` = map2_chr(n_ecoli, total_ecoli, fmt_n_pct),
+#       `ESBL K. pneumoniae` = map2_chr(n_kpneumo, total_kpneumo, fmt_n_pct),
+#       Variable = var_label
+#     ) %>%
+#     select(Variable, Values, `ESBL E. coli`, `ESBL K. pneumoniae`)
+# }
+# 
+# # 3. Aggregate across Origin of sample, Season, Region, and District
+# table_df <- bind_rows(
+#   tibble(
+#     Variable = "Overall",
+#     Values = "Total Unique INIKA_ID",
+#     `ESBL E. coli` = fmt_n_pct(total_ecoli, total_ecoli),       
+#     `ESBL K. pneumoniae` = fmt_n_pct(total_kpneumo, total_kpneumo) 
+#   ),
+#   summarize_variable(esbl_data, "ORIGIN_OF_SAMPLE", "Origin"),
+#   summarize_variable(esbl_data, "SEASON.x", "Season"),
+#   summarize_variable(esbl_data, "REGION.x", "Region"),
+#   summarize_districts(esbl_data, district_col = "DISTRICT.x", region_col = "REGION.x")
+# )
+# 
+# # 4. Construct Publication-Ready Flextable
+# esbl_table <- table_df %>%
+#   flextable() %>%
+#   set_header_labels(
+#     Variable = "Variable",
+#     Values = "Category / Value",
+#     `ESBL E. coli` = sprintf("ESBL E. coli\n(N = %d), n (%%)", total_ecoli),
+#     `ESBL K. pneumoniae` = sprintf("ESBL K. pneumoniae\n(N = %d), n (%%)", total_kpneumo)
+#   ) %>%
+#   merge_v(j = "Variable") %>%
+#   valign(j = "Variable", valign = "top") %>% 
+#   theme_booktabs() %>%
+#   bold(part = "header") %>%
+#   bold(i = ~ Values == "Total Unique INIKA_ID") %>%
+#   align(j = c("ESBL E. coli", "ESBL K. pneumoniae"), align = "center", part = "all") %>%
+#   align(j = c("Variable", "Values"), align = "left", part = "all") %>%
+#   add_header_lines(
+#     values = "Table 1: Distribution of ESBL E. coli and ESBL K. pneumoniae Isolates by Sample Origin, Season, Region, and District"
+#   ) %>%
+#   bold(i = 1, part = "header") %>%
+#   add_footer_lines(
+#     sprintf(
+#       "Note: Filtered by ESBL == 1, Ceftriaxone < 23 mm, and deduplicated by unique INIKA_ID. Percentages calculated out of total ESBL E. coli (N = %d) and ESBL K. pneumoniae (N = %d).",
+#       total_ecoli, total_kpneumo
+#     )
+#   ) %>%
+#   italic(j = c("ESBL E. coli", "ESBL K. pneumoniae"), part = "header") %>%
+#   font(fontname = "Times New Roman", part = "all") %>%
+#   fontsize(size = 10, part = "all") %>%
+#   autofit()
+# 
+# # 5. Export table to Word document in Results/ directory
+# doc <- read_docx() %>%
+#   body_add_flextable(esbl_table)
+# 
+# print(doc, target = "Results/ESBL_Ecoli_Kpneumoniae_Summary_Table.docx")
+#######################################################################
+## Counting for the Carbapenem Resistant
+#  Grouped count (if you want to see counts per Isolate or per Colony Morphology)
+df_grouped_count <- joined_data %>%
+  filter(
+    str_detect(`COLONY MORPHOLOGY ON CARBA`, "(?i)Red|Pinkish|Metalic blue")
+  ) %>%
+  distinct(INIKA_ID, Isolate, `COLONY MORPHOLOGY ON CARBA`) %>%
+  count(Isolate, name = "unique_INIKA_count") # E.coli 11
+###############################################################################
+#  Grouped breakdown by Isolate type 
+Joined_data_results_by_isolate <- joined_data %>%
+  filter(
+    str_detect(`COLONY MORPHOLOGY ON CARBA`, "(?i)Red|Pinkish|Metalic blue")
+  ) %>%
+  group_by(Isolate) %>%
+  summarise(
+    unique_INIKA_total = n_distinct(INIKA_ID),
+    with_VITEK_MS = n_distinct(INIKA_ID[!is.na(VITEK_MS_Results) & VITEK_MS_Results != ""]),
+    with_Isolate_NVI = n_distinct(INIKA_ID[!is.na(Isolate_NVI) & Isolate_NVI != ""]),
+    .groups = "drop"
+  )
+################################################################################
+# ## Computing the CR Isolation rate,(n,%)
+# # ------------------------------------------------------------------------------
+# # Helper function for proportions and Wilson 95% CI calculation
+# # ------------------------------------------------------------------------------
+# calc_rate_ci <- function(n_pos, n_total) {
+#   if (n_total == 0) {
+#     return(data.frame(
+#       cr_n_pct = "0 (0%)",
+#       ci_95    = "0 - 0"
+#     ))
+#   }
+# 
+#   # Format helper: Outputs 1 decimal place, or integer if ending in .0
+#   fmt_num <- function(val) {
+#     val_rounded <- round(val, 1)
+#     if (val_rounded %% 1 == 0) {
+#       sprintf("%.0f", val_rounded)
+#     } else {
+#       sprintf("%.1f", val_rounded)
+#     }
+#   }
+# 
+#   ci_res <- binom::binom.confint(x = n_pos, n = n_total, methods = "wilson")
+# 
+#   pct   <- (n_pos / n_total) * 100
+#   lower <- ci_res$lower * 100
+#   upper <- ci_res$upper * 100
+# 
+#   data.frame(
+#     cr_n_pct = sprintf("%d (%s%%)", n_pos, fmt_num(pct)),
+#     ci_95    = sprintf("%s - %s", fmt_num(lower), fmt_num(upper))
+#   )
+# }
+# 
+# # ------------------------------------------------------------------------------
+# # DATA CLEANING & RECODING
+# # ------------------------------------------------------------------------------
+# Joined_data_clean <- joined_data %>%
+#   select(INIKA_ID,ORIGIN_OF_SAMPLE, SEASON.x,REGION.x,DISTRICT.x,`COLONY MORPHOLOGY ON CARBA`,
+#          VITEK_MS_Results,Isolate,PROTOCOL,Isolate_NVI) %>%
+#   rename('SEASON' = SEASON.x, 'REGION' = REGION.x,'DISTRICT' = DISTRICT.x)%>%
+#   # Recode category values
+#   rename(
+#     `Sample origin` = ORIGIN_OF_SAMPLE,
+#     `Season`        = SEASON,
+#     `Region`        = REGION,
+#     `District`      = DISTRICT
+#   )
+# 
+# # Base unique dataset for total tested counts (Denominator)
+# denom_df <- Joined_data_clean %>%
+#   group_by(INIKA_ID) %>%
+#   slice(1) %>%
+#   ungroup()
+# 
+# # Target isolates count matching criteria (Numerator)
+# cr_isolates_df <- Joined_data_clean %>%
+#   filter(str_detect(`COLONY MORPHOLOGY ON CARBA`, "(?i)Red|Pinkish|Metalic blue")) %>%
+#   group_by(INIKA_ID) %>%
+#   slice(1) %>%
+#   ungroup()
+# 
+# # Function to compute row metrics for a given variable and grouping column
+# compute_strata_table <- function(data_denom, data_cr, var_label, group_col) {
+#   categories <- data_denom %>%
+#     pull({{ group_col }}) %>%
+#     unique() %>%
+#     na.omit()
+# 
+#   map_dfr(categories, function(cat) {
+#     n_tot <- data_denom %>% filter({{ group_col }} == cat) %>% pull(INIKA_ID) %>% n_distinct()
+#     n_pos <- data_cr %>% filter({{ group_col }} == cat) %>% pull(INIKA_ID) %>% n_distinct()
+# 
+#     ci_stats <- calc_rate_ci(n_pos, n_tot)
+# 
+#     tibble(
+#       Variable = var_label,
+#       Category = as.character(cat),
+#       `Total test` = n_tot,
+#       `CR E. coli (n, %)` = ci_stats$cr_n_pct,
+#       `95% CI` = ci_stats$ci_95
+#     )
+#   })
+# }
+# 
+# # ------------------------------------------------------------------------------
+# # Overall Isolation Rate
+# # ------------------------------------------------------------------------------
+# total_tested_overall <- n_distinct(denom_df$INIKA_ID)
+# total_cr_overall <- n_distinct(cr_isolates_df$INIKA_ID)
+# overall_ci <- calc_rate_ci(total_cr_overall, total_tested_overall)
+# 
+# overall_row <- tibble(
+#   Variable = "Overall",
+#   Category = "Overall",
+#   `Total test` = total_tested_overall,
+#   `CR E. coli (n, %)` = overall_ci$cr_n_pct,
+#   `95% CI` = overall_ci$ci_95
+# )
+# 
+# # ------------------------------------------------------------------------------
+# # Stratified Computations
+# # ------------------------------------------------------------------------------
+# sample_origin_rows <- compute_strata_table(denom_df, cr_isolates_df, "Sample origin", `Sample origin`)
+# season_rows        <- compute_strata_table(denom_df, cr_isolates_df, "Season", Season)
+# region_rows        <- compute_strata_table(denom_df, cr_isolates_df, "Region", Region)
+# 
+# # District sorting: Kilimanjaro districts first (alphabetical), then Mwanza districts (alphabetical)
+# kilimanjaro_districts <- denom_df %>%
+#   filter(Region == "Kilimanjaro") %>%
+#   pull(District) %>%
+#   unique() %>%
+#   na.omit() %>%
+#   sort()
+# 
+# mwanza_districts <- denom_df %>%
+#   filter(Region == "Mwanza") %>%
+#   pull(District) %>%
+#   unique() %>%
+#   na.omit() %>%
+#   sort()
+# 
+# ordered_districts <- c(kilimanjaro_districts, mwanza_districts)
+# 
+# district_rows <- map_dfr(ordered_districts, function(dist) {
+#   n_tot <- denom_df %>% filter(District == dist) %>% pull(INIKA_ID) %>% n_distinct()
+#   n_pos <- cr_isolates_df %>% filter(District == dist) %>% pull(INIKA_ID) %>% n_distinct()
+# 
+#   ci_stats <- calc_rate_ci(n_pos, n_tot)
+# 
+#   tibble(
+#     Variable = "District",
+#     Category = as.character(dist),
+#     `Total test` = n_tot,
+#     `CR E. coli (n, %)` = ci_stats$cr_n_pct,
+#     `95% CI` = ci_stats$ci_95
+#   )
+# })
+# 
+# # ------------------------------------------------------------------------------
+# # Combine and Format Final Table
+# # ------------------------------------------------------------------------------
+# final_table_df <- bind_rows(
+#   overall_row,
+#   sample_origin_rows,
+#   season_rows,
+#   region_rows,
+#   district_rows
+# )
+# 
+# # Blank out repeated Variable labels for clean publication display
+# final_table_formatted <- final_table_df %>%
+#   mutate(
+#     Variable = if_else(duplicated(Variable), "", Variable)
+#   )
+# 
+# # ------------------------------------------------------------------------------
+# # Build Flextable and Save to Word Document
+# # ------------------------------------------------------------------------------
+# if (!dir.exists("Results")) {
+#   dir.create("Results")
+# }
+# 
+# ft <- flextable(final_table_formatted) %>%
+#   set_header_labels(
+#     Variable = "Variable",
+#     Category = "Category",
+#     `Total test` = "Total test",
+#     `CR E. coli (n, %)` = "CR E. coli (n, %)",
+#     `95% CI` = "95% CI"
+#   ) %>%
+#   autofit() %>%
+#   theme_booktabs() %>%
+#   align(j = c("Total test", "CR E. coli (n, %)", "95% CI"), align = "center", part = "all") %>%
+#   bold(i = ~ Variable != "", j = "Variable", bold = TRUE) %>%
+#   italic(j = "CR E. coli (n, %)", part = "header") %>%  # Optional: Italics for species name
+#   fontsize(size = 10, part = "all") %>%
+#   font(fontname = "Times New Roman", part = "all")
+# 
+# # Write to Word file in 'Results' directory
+# doc <- read_docx() %>%
+#   body_add_par("Table: Carbapenem-Resistant (CR) E. coli Isolation Rates Stratified by Socio-Demographic and Geographic Characteristics", style = "heading 2") %>%
+#   body_add_flextable(ft)
+# 
+# output_path <- file.path("Results", "CR_E_coli_Isolation_Rates_Table.docx")
+# print(doc, target = output_path)
+# 
+# message("Table successfully compiled and saved to: ", output_path)
+################################################################################
+### Carbapenem-Resistant (CR) Enterobacterales Isolation and Species Confirmation 
+# Helper function for proportions and Wilson 95% CI calculation
+# ------------------------------------------------------------------------------
+calc_rate_ci <- function(n_pos, n_total) {
+  if (n_total == 0) {
+    return(list(
+      cr_n_pct = "0 (0%)",
+      ci_95    = "0 - 0",
+      combined = "0 (0%) [0 - 0]"
+    ))
+  }
+  
+  ci_res <- binom::binom.confint(x = n_pos, n = n_total, methods = "wilson")
+  
+  pct   <- (n_pos / n_total) * 100
+  lower <- max(0, ci_res$lower * 100)
+  upper <- min(100, ci_res$upper * 100)
+  
+  n_pct_str <- sprintf("%d (%s%%)", n_pos, fmt_num(pct))
+  ci_str    <- sprintf("%s - %s", fmt_num(lower), fmt_num(upper))
+  
+  list(
+    cr_n_pct = n_pct_str,
+    ci_95    = ci_str,
+    combined = sprintf("%s [%s]", n_pct_str, ci_str)
+  )
+}
+
+# Rounds to 2 decimal places, omits .00 for whole numbers
+fmt_num <- function(val) {
+  if (is.na(val) || val == 0) return("0")
+  
+  val_rounded <- round(val, 2)
+  
+  # Format with up to 2 decimals, then trim unnecessary trailing zeros
+  formatted <- sprintf("%.2f", val_rounded)
+  formatted <- sub("\\.00$", "", formatted)          # e.g., 3.00 -> 3
+  formatted <- sub("(\\.[1-9])0$", "\\1", formatted) # e.g., 3.50 -> 3.5
+  
+  return(formatted)
+}
+
+# ------------------------------------------------------------------------------
+# DATA CLEANING & ISOLATE CONFIRMATION RECODING
+# ------------------------------------------------------------------------------
+Joined_data_clean <- joined_data %>%
+  select(INIKA_ID, ORIGIN_OF_SAMPLE, SEASON.x, REGION.x, DISTRICT.x, `COLONY MORPHOLOGY ON CARBA`,
+         VITEK_MS_Results, Isolate, PROTOCOL, Isolate_NVI) %>%
+  rename('SEASON' = SEASON.x, 'REGION' = REGION.x, 'DISTRICT' = DISTRICT.x) %>%
+  mutate(
+    is_initial_ecoli = str_detect(coalesce(Isolate, ""), "(?i)E\\.?\\s*coli"),
+    is_vitek_ecoli   = str_detect(coalesce(VITEK_MS_Results, ""), "(?i)Escherichia\\s+coli"),
+    is_nvi_ecoli     = str_detect(coalesce(Isolate_NVI, ""), "(?i)E\\.?\\s*coli|Escherichia\\s+coli"),
+    is_nvi_kpneuma   = str_detect(coalesce(Isolate_NVI, ""), "(?i)K\\.?\\s*pneumoniae|Klebsiella\\s+pneumoniae"),
+    
+    CONFIRMED_SPECIES = case_when(
+      is_initial_ecoli & (is_vitek_ecoli | is_nvi_ecoli) ~ "CR Escherichia coli",
+      is_initial_ecoli & is_nvi_kpneuma                  ~ "CR Klebsiella pneumoniae",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  rename(
+    `Sample origin` = ORIGIN_OF_SAMPLE,  
+    `Season`        = SEASON,
+    `Region`        = REGION,
+    `District`      = DISTRICT
+  )
+
+denom_df <- Joined_data_clean %>%
+  group_by(INIKA_ID) %>%
+  slice(1) %>%
+  ungroup()
+
+cr_isolates_df <- Joined_data_clean %>%
+  filter(str_detect(coalesce(`COLONY MORPHOLOGY ON CARBA`, ""), "(?i)Red|Pinkish|Metalic blue")) %>%
+  group_by(INIKA_ID) %>%
+  slice(1) %>%
+  ungroup()
+
+# ------------------------------------------------------------------------------
+# STRATA COMPUTATION FUNCTION
+# ------------------------------------------------------------------------------
+compute_strata_table <- function(data_denom, data_cr, var_label, group_col) {
+  categories <- data_denom %>%
+    pull({{ group_col }}) %>%
+    unique() %>%
+    na.omit()
+  
+  map_dfr(categories, function(cat) {
+    n_tot <- data_denom %>% filter({{ group_col }} == cat) %>% pull(INIKA_ID) %>% n_distinct()
+    
+    data_cr_sub <- data_cr %>% filter({{ group_col }} == cat)
+    n_pos <- data_cr_sub %>% pull(INIKA_ID) %>% n_distinct()
+    
+    ci_stats <- calc_rate_ci(n_pos, n_tot)
+    
+    n_ecoli <- data_cr_sub %>% filter(CONFIRMED_SPECIES == "CR Escherichia coli") %>% pull(INIKA_ID) %>% n_distinct()
+    n_kpneu <- data_cr_sub %>% filter(CONFIRMED_SPECIES == "CR Klebsiella pneumoniae") %>% pull(INIKA_ID) %>% n_distinct()
+    
+    ci_ecoli <- calc_rate_ci(n_ecoli, n_tot)
+    ci_kpneu <- calc_rate_ci(n_kpneu, n_tot)
+    
+    tibble(
+      Variable = var_label,
+      Category = as.character(cat),
+      `Total test` = n_tot,
+      `pCR Escherichia coli n (%) [95% CI]` = ci_stats$combined,
+      `CR Escherichia coli n (%) [95% CI]` = ci_ecoli$combined,
+      `CR Klebsiella pneumoniae n (%) [95% CI]` = ci_kpneu$combined
+    )
+  })
+}
+
+# ------------------------------------------------------------------------------
+# COMPUTE TABLE SECTIONS
+# ------------------------------------------------------------------------------
+total_tested_overall <- n_distinct(denom_df$INIKA_ID)
+total_cr_overall    <- n_distinct(cr_isolates_df$INIKA_ID)
+overall_ci          <- calc_rate_ci(total_cr_overall, total_tested_overall)
+
+overall_ecoli    <- cr_isolates_df %>% filter(CONFIRMED_SPECIES == "CR Escherichia coli") %>% pull(INIKA_ID) %>% n_distinct()
+overall_kpneu    <- cr_isolates_df %>% filter(CONFIRMED_SPECIES == "CR Klebsiella pneumoniae") %>% pull(INIKA_ID) %>% n_distinct()
+
+overall_ci_ecoli <- calc_rate_ci(overall_ecoli, total_tested_overall)
+overall_ci_kpneu <- calc_rate_ci(overall_kpneu, total_tested_overall)
+
+overall_row <- tibble(
+  Variable = "Overall",
+  Category = "Overall",
+  `Total test` = total_tested_overall,
+  `pCR Escherichia coli n (%) [95% CI]` = overall_ci$combined,
+  `CR Escherichia coli n (%) [95% CI]` = overall_ci_ecoli$combined,
+  `CR Klebsiella pneumoniae n (%) [95% CI]` = overall_ci_kpneu$combined
+)
+
+sample_origin_rows <- compute_strata_table(denom_df, cr_isolates_df, "Sample origin", `Sample origin`)
+season_rows        <- compute_strata_table(denom_df, cr_isolates_df, "Season", Season)
+region_rows        <- compute_strata_table(denom_df, cr_isolates_df, "Region", Region)
+
+kilimanjaro_districts <- denom_df %>% filter(Region == "Kilimanjaro") %>% pull(District) %>% unique() %>% na.omit() %>% sort()
+mwanza_districts      <- denom_df %>% filter(Region == "Mwanza") %>% pull(District) %>% unique() %>% na.omit() %>% sort()
+ordered_districts     <- c(kilimanjaro_districts, mwanza_districts)
+
+district_rows <- map_dfr(ordered_districts, function(dist) {
+  n_tot <- denom_df %>% filter(District == dist) %>% pull(INIKA_ID) %>% n_distinct()
+  data_cr_sub <- cr_isolates_df %>% filter(District == dist)
+  n_pos <- data_cr_sub %>% pull(INIKA_ID) %>% n_distinct()
+  
+  ci_stats <- calc_rate_ci(n_pos, n_tot)
+  
+  n_ecoli <- data_cr_sub %>% filter(CONFIRMED_SPECIES == "CR Escherichia coli") %>% pull(INIKA_ID) %>% n_distinct()
+  n_kpneu <- data_cr_sub %>% filter(CONFIRMED_SPECIES == "CR Klebsiella pneumoniae") %>% pull(INIKA_ID) %>% n_distinct()
+  
+  ci_ecoli <- calc_rate_ci(n_ecoli, n_tot)
+  ci_kpneu <- calc_rate_ci(n_kpneu, n_tot)
+  
+  tibble(
+    Variable = "District",
+    Category = as.character(dist),
+    `Total test` = n_tot,
+    `pCR Escherichia coli n (%) [95% CI]` = ci_stats$combined,
+    `CR Escherichia coli n (%) [95% CI]` = ci_ecoli$combined,
+    `CR Klebsiella pneumoniae n (%) [95% CI]` = ci_kpneu$combined
+  )
+})
+
+final_table_df <- bind_rows(
+  overall_row,
+  sample_origin_rows,
+  season_rows,
+  region_rows,
+  district_rows
+)
+
+# Identify non-duplicated variable positions for formatting before blanking them out
+bold_rows <- which(!duplicated(final_table_df$Variable))
+
+final_table_formatted <- final_table_df %>%
+  mutate(Variable = if_else(duplicated(Variable), "", Variable))
+
+# ------------------------------------------------------------------------------
+# FLEXTABLE GENERATION
+# ------------------------------------------------------------------------------
+if (!dir.exists("Results")) {
+  dir.create("Results")
+}
+
+ft <- flextable(final_table_formatted) %>%
+  set_header_labels(
+    Variable = "Variable",
+    Category = "Category",
+    `Total test` = "Total test",
+    `pCR Escherichia coli n (%) [95% CI]` = "pCR Escherichia coli\nn (%) [95% CI]",
+    `CR Escherichia coli n (%) [95% CI]` = "CR Escherichia coli\nn (%) [95% CI]",
+    `CR Klebsiella pneumoniae n (%) [95% CI]` = "CR Klebsiella pneumoniae\nn (%) [95% CI]"
+  ) %>%
+  add_header_row(
+    top = TRUE,
+    values = c(
+      "Variable", 
+      "Category", 
+      "Total test", 
+      "Presumptive CR Isolates", 
+      "Confirmed isolate", 
+      "Confirmed isolate"
+    )
+  ) %>%
+  merge_h(part = "header") %>%
+  merge_v(part = "header") %>%
+  compose(
+    i = 2, j = "pCR Escherichia coli n (%) [95% CI]",
+    value = as_paragraph("pCR ", as_i("Escherichia coli"), "\nn (%) [95% CI]"),
+    part = "header"
+  ) %>%
+  compose(
+    i = 2, j = "CR Escherichia coli n (%) [95% CI]",
+    value = as_paragraph("CR ", as_i("Escherichia coli"), "\nn (%) [95% CI]"),
+    part = "header"
+  ) %>%
+  compose(
+    i = 2, j = "CR Klebsiella pneumoniae n (%) [95% CI]",
+    value = as_paragraph("CR ", as_i("Klebsiella pneumoniae"), "\nn (%) [95% CI]"),
+    part = "header"
+  ) %>%
+  add_footer_lines("CR = Carbapenem-Resistant, pCR = Presumptive Carbapenem-Resistant; CI = Confidence Interval (calculated via Wilson score method).") %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  align(
+    j = c("Total test", "pCR Escherichia coli n (%) [95% CI]", 
+          "CR Escherichia coli n (%) [95% CI]", "CR Klebsiella pneumoniae n (%) [95% CI]"),
+    align = "center", 
+    part = "all"
+  ) %>%
+  bold(i = bold_rows, j = 1, bold = TRUE, part = "body") %>%
+  fontsize(size = 9, part = "all") %>%
+  fontsize(size = 8, part = "footer") %>%
+  font(fontname = "Times New Roman", part = "all")
+
+# Save Word Document
+doc <- read_docx() %>%
+  body_add_par("Table: Carbapenem-Resistant (CR) Enterobacterales Isolation and Species Confirmation Stratified by Socio-Demographic and Geographic Characteristics", style = "heading 2") %>%
+  body_add_flextable(ft)
+
+output_path <- file.path("Results", "CR_E_coli_Isolation_Rates_Table.docx")
+print(doc, target = output_path)
+
+message("Table successfully updated with footer and revised species headers. Output saved to: ", output_path)
+################################################################################
+# Subsetting unique participant isolate records
+cr_isolates_subset <- joined_data %>%
+  filter(
+    str_detect(coalesce(`COLONY MORPHOLOGY ON CARBA`, ""), "(?i)Red|Pinkish|Metalic blue")
+  ) %>%
+  distinct(INIKA_ID, Isolate, `COLONY MORPHOLOGY ON CARBA`, .keep_all = TRUE) %>%
+  select(INIKA_ID,SEASON,REGION,DISTRICT, `COLONY MORPHOLOGY ON CARBA`,
+         PROTOCOL,Isolate,VITEK_MS_Results, Isolate_NVI) # The isolate tested at TVLA was not turned to E.coli ~ Citrobacter
+################################################################################
+# ESBL Counting 2
+
+# 1. Create 'Results' folder if it does not exist
+if (!dir.exists("Results")) {
+  dir.create("Results")
+}
+
+# Helper function: formats n (%) to 1 decimal place, stripping '.0' for whole numbers
+fmt_n_pct <- function(n, total) {
+  if (is.na(total) || total == 0) return("0 (0%)")
+  pct <- (n / total) * 100
+  pct_str <- sub("\\.0$", "", sprintf("%.1f", pct))
+  sprintf("%d (%s%%)", n, pct_str)
+}
+
+# 2. Rename & Convert Antibiotics Data
+cleaned_data <- joined_data %>%
+  rename(
+    Amoxicillin = AMX_ED10,
+    Azithromycin = AZM_ED15,
+    Ceftriaxone = CRO_ED30,
+    Ciprofloxacin = CIP_ED5,
+    Doxycycline = DOX_ED30,
+    Florfenicol = FLR_ED30,
+    Gentamicin = GEN_ED10,
+    Meropenem = MEM_ED10,
+    Oxytetracycline = OXY_ED30,
+    `Polymyxin_B(PB)` = POL_ED300,
+    `Sulfamethoxazole/Trimethoprim` = SXT_ED1_2,
+    Cefotaxime = CTX_ED5,
+    `Cefotaxime/Clavulanic Acid` = CTC_ED30
+  ) %>%
+  mutate(across(all_of(abx_cols), ~ as.numeric(trimws(.))))
+
+# 3. Filter Confirmed 3GCR Isolates
+c3gcr_data <- cleaned_data %>%
+  filter(
+    Ceftriaxone < 23,
+    (
+      (grepl("E|K", Isolate, ignore.case = TRUE) & grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE)) |
+        (grepl("E|K", Isolate, ignore.case = TRUE) & trimws(VITEK_MS_Results) == "Klebsiella pneumoniae")
+    )
+  ) %>%
+  mutate(
+    C3GCR_Species = case_when(
+      grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) ~ "Confirmed 3GCR Escherichia coli",
+      trimws(VITEK_MS_Results) == "Klebsiella pneumoniae" ~ "Confirmed 3GCR Klebsiella pneumoniae",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Calculate total Confirmed 3GCR per species (deduplicated by INIKA_ID)
+total_c3gcr_ecoli <- c3gcr_data %>%
+  filter(C3GCR_Species == "Confirmed 3GCR Escherichia coli") %>%
+  distinct(INIKA_ID) %>%
+  nrow()
+
+total_c3gcr_kpneumo <- c3gcr_data %>%
+  filter(C3GCR_Species == "Confirmed 3GCR Klebsiella pneumoniae") %>%
+  distinct(INIKA_ID) %>%
+  nrow()
+
+# 4. Filter ESBL Positives from Confirmed 3GCR Data
+esbl_data <- c3gcr_data %>%
+  filter(`Cefotaxime/Clavulanic Acid` - Cefotaxime >= 5) %>%
+  filter(
+    (
+      (grepl("E", Isolate, ignore.case = TRUE) & grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & grepl("Pink|Red", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE)) |
+        (grepl("K", Isolate, ignore.case = TRUE) & grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) & grepl("Metallic blue", `COLONY MORPHOLOGY ON C3GR`, ignore.case = TRUE))
+    ) |
+      (trimws(VITEK_MS_Results) == "Klebsiella pneumoniae")
+  ) %>%
+  mutate(
+    Species_Group = case_when(
+      grepl("Escherichia coli", VITEK_MS_Results, ignore.case = TRUE) ~ "E. coli",
+      trimws(VITEK_MS_Results) == "Klebsiella pneumoniae" ~ "K. pneumoniae",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  arrange(INIKA_ID, Isolate) %>%
+  distinct(INIKA_ID, Species_Group, .keep_all = TRUE)
+
+# Logging summary messages
+n_esbl_ecoli <- sum(esbl_data$Species_Group == "E. coli", na.rm = TRUE)
+n_esbl_kpneumo <- sum(esbl_data$Species_Group == "K. pneumoniae", na.rm = TRUE)
+
+message(sprintf("Confirmed 3GCR E. coli total: %d", total_c3gcr_ecoli))
+message(sprintf("Confirmed 3GCR K. pneumoniae total: %d", total_c3gcr_kpneumo))
+message(sprintf("ESBL E. coli isolates retained: %d", n_esbl_ecoli))
+message(sprintf("ESBL K. pneumoniae isolates retained: %d", n_esbl_kpneumo))
+
+# 5. Summarizer Functions
+summarize_variable <- function(c3g_df, esbl_df, var_col, var_label) {
+  var_sym <- sym(var_col)
+  
+  c3g_counts <- c3g_df %>%
+    filter(!is.na(!!var_sym)) %>%
+    group_by(Values = as.character(!!var_sym)) %>%
+    summarise(
+      c3g_ecoli = n_distinct(INIKA_ID[C3GCR_Species == "Confirmed 3GCR Escherichia coli"]),
+      c3g_kpneumo = n_distinct(INIKA_ID[C3GCR_Species == "Confirmed 3GCR Klebsiella pneumoniae"]),
+      .groups = "drop"
+    )
+  
+  esbl_counts <- esbl_df %>%
+    filter(!is.na(!!var_sym)) %>%
+    group_by(Values = as.character(!!var_sym)) %>%
+    summarise(
+      n_ecoli = n_distinct(INIKA_ID[Species_Group == "E. coli"]),
+      n_kpneumo = n_distinct(INIKA_ID[Species_Group == "K. pneumoniae"]),
+      .groups = "drop"
+    )
+  
+  full_join(c3g_counts, esbl_counts, by = "Values") %>%
+    mutate(
+      across(c(c3g_ecoli, c3g_kpneumo, n_ecoli, n_kpneumo), ~ coalesce(., 0L)),
+      `Total confirmed 3GCR Escherichia coli` = as.character(c3g_ecoli),
+      `ESBL E. coli` = map2_chr(n_ecoli, c3g_ecoli, fmt_n_pct),
+      `Confirmed 3GCR Klebsiella pneumoniae` = as.character(c3g_kpneumo),
+      `ESBL K. pneumoniae` = map2_chr(n_kpneumo, c3g_kpneumo, fmt_n_pct),
+      Variable = var_label
+    ) %>%
+    select(
+      Variable, Values, 
+      `Total confirmed 3GCR Escherichia coli`, `ESBL E. coli`, 
+      `Confirmed 3GCR Klebsiella pneumoniae`, `ESBL K. pneumoniae`
+    )
+}
+
+summarize_districts <- function(c3g_df, esbl_df, district_col, region_col) {
+  dist_sym <- sym(district_col)
+  reg_sym <- sym(region_col)
+  
+  c3g_counts <- c3g_df %>%
+    filter(!is.na(!!dist_sym), !is.na(!!reg_sym)) %>%
+    group_by(Region = as.character(!!reg_sym), District = as.character(!!dist_sym)) %>%
+    summarise(
+      c3g_ecoli = n_distinct(INIKA_ID[C3GCR_Species == "Confirmed 3GCR Escherichia coli"]),
+      c3g_kpneumo = n_distinct(INIKA_ID[C3GCR_Species == "Confirmed 3GCR Klebsiella pneumoniae"]),
+      .groups = "drop"
+    )
+  
+  esbl_counts <- esbl_df %>%
+    filter(!is.na(!!dist_sym), !is.na(!!reg_sym)) %>%
+    group_by(Region = as.character(!!reg_sym), District = as.character(!!dist_sym)) %>%
+    summarise(
+      n_ecoli = n_distinct(INIKA_ID[Species_Group == "E. coli"]),
+      n_kpneumo = n_distinct(INIKA_ID[Species_Group == "K. pneumoniae"]),
+      .groups = "drop"
+    )
+  
+  full_join(c3g_counts, esbl_counts, by = c("Region", "District")) %>%
+    mutate(
+      across(c(c3g_ecoli, c3g_kpneumo, n_ecoli, n_kpneumo), ~ coalesce(., 0L)),
+      Region = factor(Region, levels = c("Kilimanjaro", "Mwanza"))
+    ) %>%
+    arrange(Region, District) %>%
+    mutate(
+      `Total confirmed 3GCR Escherichia coli` = as.character(c3g_ecoli),
+      `ESBL E. coli` = map2_chr(n_ecoli, c3g_ecoli, fmt_n_pct),
+      `Confirmed 3GCR Klebsiella pneumoniae` = as.character(c3g_kpneumo),
+      `ESBL K. pneumoniae` = map2_chr(n_kpneumo, c3g_kpneumo, fmt_n_pct),
+      Variable = "District",
+      Values = District
+    ) %>%
+    select(
+      Variable, Values, 
+      `Total confirmed 3GCR Escherichia coli`, `ESBL E. coli`, 
+      `Confirmed 3GCR Klebsiella pneumoniae`, `ESBL K. pneumoniae`
+    )
+}
+
+# 6. Aggregate Table Data
+table_df <- bind_rows(
+  tibble(
+    Variable = "Overall",
+    Values = "Confirmed 3GCR",
+    `Total confirmed 3GCR Escherichia coli` = as.character(total_c3gcr_ecoli),
+    `ESBL E. coli` = fmt_n_pct(n_esbl_ecoli, total_c3gcr_ecoli),
+    `Confirmed 3GCR Klebsiella pneumoniae` = as.character(total_c3gcr_kpneumo),
+    `ESBL K. pneumoniae` = fmt_n_pct(n_esbl_kpneumo, total_c3gcr_kpneumo)
+  ),
+  summarize_variable(c3gcr_data, esbl_data, "ORIGIN_OF_SAMPLE", "Origin"),
+  summarize_variable(c3gcr_data, esbl_data, "SEASON.x", "Season"),
+  summarize_variable(c3gcr_data, esbl_data, "REGION.x", "Region"),
+  summarize_districts(c3gcr_data, esbl_data, district_col = "DISTRICT.x", region_col = "REGION.x")
+)
+
+# 7. Construct Publication-Ready Flextable
+border_style <- fp_border(color = "black", width = 1)
+title_text <- "Table 1: Distribution of ESBL E. coli and ESBL K. pneumoniae Isolates by Sample Origin, Season, Region, and District"
+
+esbl_table <- table_df %>%
+  flextable() %>%
+  # --- UPDATE: Set caption outside table grid ---
+  set_caption(caption = title_text) %>%
+  # ---------------------------------------------
+set_header_labels(
+  Variable = "Variable",
+  Values = "Category / Value",
+  `Total confirmed 3GCR Escherichia coli` = "Total confirmed 3GCR Escherichia coli",
+  `ESBL E. coli` = sprintf("ESBL E. coli\n(N = %d), n (%%)", n_esbl_ecoli),
+  `Confirmed 3GCR Klebsiella pneumoniae` = "Confirmed 3GCR Klebsiella pneumoniae",
+  `ESBL K. pneumoniae` = sprintf("ESBL K. pneumoniae\n(N = %d), n (%%)", n_esbl_kpneumo)
+) %>%
+  merge_v(j = "Variable", part = "body") %>%
+  valign(j = "Variable", valign = "top", part = "body") %>%
+  theme_booktabs() %>%
+  bold(part = "header") %>%
+  bold(i = ~ Values == "Confirmed 3GCR", part = "body") %>%
+  align(j = c("Total confirmed 3GCR Escherichia coli", "ESBL E. coli", "Confirmed 3GCR Klebsiella pneumoniae", "ESBL K. pneumoniae"), align = "center", part = "all") %>%
+  align(j = c("Variable", "Values"), align = "left", part = "all") %>%
+  italic(j = c("Total confirmed 3GCR Escherichia coli", "ESBL E. coli", 
+               "Confirmed 3GCR Klebsiella pneumoniae", "ESBL K. pneumoniae"), 
+         part = "header") %>%
+  add_footer_lines(
+    sprintf(
+      "Note: Percentages calculated out of total Confirmed 3GCR Escherichia coli (N = %d) and Confirmed 3GCR Klebsiella pneumoniae (N = %d).",
+      total_c3gcr_ecoli, total_c3gcr_kpneumo
+    )
+  ) %>%
+  italic(part = "footer") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  fontsize(size = 10, part = "all") %>%
+  autofit()
+# 8. Export to Word
+doc <- read_docx() %>%
+  body_add_flextable(esbl_table)
+
+print(doc, target = "Results/ESBL_Ecoli_Kpneumoniae_Summary_Table.docx")
+######################################################################
+## Computing the AMR for the confirmed CR E.coli
+# 1. Define Antibiotic Class Mapping
+abx_classes <- tribble(
+  ~Antimicrobial_substance,          ~Class,
+  "Amoxicillin",                     "Penicillins",
+  "Azithromycin",                    "Macrolides",
+  "Ceftriaxone",                     "Cephalosporins (3rd Gen)",
+  "Cefotaxime",                      "Cephalosporins (3rd Gen)",
+  "Cefotaxime/Clavulanic Acid",      "β-lactam/Inhibitor",
+  "Ciprofloxacin",                   "Fluoroquinolones",
+  "Doxycycline",                     "Tetracyclines",
+  "Oxytetracycline",                 "Tetracyclines",
+  "Gentamicin",                      "Aminoglycosides",
+  "Meropenem",                       "Carbapenems",
+  "Florfenicol",                     "Phenicols",
+  "Polymyxin_B(PB)",                 "Polymyxins",
+  "Sulfamethoxazole/Trimethoprim",   "Sulfonamides"
+)
+
+abx_cols <- abx_classes$Antimicrobial_substance
+
+# 2. Main Processing Function (Count ONLY for CR E. coli)
+process_cr_ecoli_amr_results <- function(joined_data, Ecoli_EPI_CUTOFF) {
+  
+  # Step 1: Clean, confirm species, and filter strictly for CR E. coli
+  Data_Clean <- joined_data %>%
+    select(
+      INIKA_ID, ORIGIN_OF_SAMPLE, SEASON.x, REGION.x, DISTRICT.x,
+      `COLONY MORPHOLOGY ON CARBA`, VITEK_MS_Results, Isolate, Isolate_NVI,
+      AMX_ED10, AZM_ED15, CRO_ED30, CIP_ED5, DOX_ED30, FLR_ED30,
+      GEN_ED10, MEM_ED10, OXY_ED30, POL_ED300, SXT_ED1_2,
+      CTX_ED5, CTC_ED30
+    ) %>%
+    rename(
+      'SEASON' = SEASON.x, 
+      'REGION' = REGION.x,
+      'DISTRICT' = DISTRICT.x,
+      Amoxicillin = AMX_ED10,
+      Azithromycin = AZM_ED15,
+      Ceftriaxone = CRO_ED30,
+      Ciprofloxacin = CIP_ED5,
+      Doxycycline = DOX_ED30,
+      Florfenicol = FLR_ED30,
+      Gentamicin = GEN_ED10,
+      Meropenem = MEM_ED10,
+      Oxytetracycline = OXY_ED30,
+      `Polymyxin_B(PB)` = POL_ED300,
+      `Sulfamethoxazole/Trimethoprim` = SXT_ED1_2,
+      Cefotaxime = CTX_ED5,
+      `Cefotaxime/Clavulanic Acid` = CTC_ED30
+    ) %>%
+    # Multi-level species confirmation logic
+    mutate(
+      # Check exclusively if Isolate_NVI indicates E. coli
+      is_nvi_ecoli = str_detect(coalesce(Isolate_NVI, ""), "(?i)E\\.?\\s*coli|Escherichia\\s+coli|^E$"),
+      
+      CONFIRMED_SPECIES = case_when(
+        is_nvi_ecoli ~ "CR Escherichia coli",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    mutate(across(all_of(abx_cols), ~ as.numeric(trimws(.)))) %>%
+
+    filter(
+      CONFIRMED_SPECIES == "CR Escherichia coli",
+      str_detect(coalesce(`COLONY MORPHOLOGY ON CARBA`, ""), "(?i)Red|Pinkish|Pink|Metalic blue")
+    ) %>%
+    # Deduplicate strictly by INIKA_ID
+    group_by(INIKA_ID) %>%
+    slice(1) %>%
+    ungroup()
+  
+  message(sprintf("Total confirmed CR E. coli unique isolates processed: %d", nrow(Data_Clean)))
+  
+  # Step 2: Pivot long and merge with ECOFF cutoffs
+  Ecoli_Long <- Data_Clean %>%
+    pivot_longer(
+      cols = any_of(abx_classes$Antimicrobial_substance),
+      names_to = "Antimicrobial_substance",
+      values_to = "value"
+    ) %>%
+    left_join(Ecoli_EPI_CUTOFF, by = "Antimicrobial_substance") %>%
+    mutate(
+      S_num = as.numeric(str_replace_all(S, "[^0-9.]", "")),
+      R_num = as.numeric(str_replace_all(R, "[^0-9.]", "")),
+      Measured_Zone = as.numeric(str_trim(value)),
+      Categorical_Result = case_when(
+        Measured_Zone >= S_num ~ "S",
+        Measured_Zone <= R_num ~ "R",
+        Measured_Zone > R_num & Measured_Zone < S_num ~ "I",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(Categorical_Result))
+  
+  # Step 3: Calculation helper logic
+  calculate_summary <- function(df, group_var) {
+    group_cols <- if (group_var == "Overall") "Antimicrobial_substance" else c(group_var, "Antimicrobial_substance")
+    df %>%
+      group_by(across(all_of(group_cols))) %>%
+      summarise(
+        Total = n(),
+        Resistant = sum(Categorical_Result == "R"),
+        .groups = "drop"
+      ) %>%
+      mutate(
+        Grouping_Variable = group_var,
+        Grouping_Value = if (group_var == "Overall") "Overall" else as.character(.data[[group_var]])
+      )
+  }
+  
+  group_vars <- c("Overall", "ORIGIN_OF_SAMPLE", "REGION", "SEASON")
+  Combined_Summaries <- map_dfr(group_vars, ~ calculate_summary(Ecoli_Long, .x))
+  
+  # Step 4: Formatting final output table
+  Final_Table <- Combined_Summaries %>%
+    rowwise() %>%
+    mutate(
+      Percentage = round((Resistant / Total) * 100, 1),
+      CI_text = if (Grouping_Variable == "Overall") {
+        test <- binom.test(Resistant, Total)
+        paste0(" (", round(test$conf.int[1] * 100, 1), "–", round(test$conf.int[2] * 100, 1), ")")
+      } else { "" },
+      Display_Value = paste0(Percentage, "% (", Resistant, "/", Total, ")", CI_text)
+    ) %>%
+    ungroup() %>%
+    select(Antimicrobial_substance, Grouping_Value, Display_Value) %>%
+    pivot_wider(names_from = Grouping_Value, values_from = Display_Value) %>%
+    left_join(abx_classes, by = "Antimicrobial_substance") %>%
+    select(Class, Antimicrobial_substance, Overall, everything()) %>%
+    arrange(Class, Antimicrobial_substance)
+  
+  return(Final_Table)
+}
+
+# 3. Run and Export Results
+final_CR_ECO_AMR_table <- process_cr_ecoli_amr_results(joined_data, Ecoli_EPI_CUTOFF)
+
+if (!dir.exists("Results")) dir.create("Results")
+
+# Export to Excel
+write_xlsx(final_CR_ECO_AMR_table, "Results/CR_Ecoli_AMR_Resistance_Table.xlsx")
+
+# Export to Word Document
+ft_compact <- flextable(final_CR_ECO_AMR_table) %>%
+  theme_booktabs() %>%
+  autofit() %>%
+  fontsize(size = 8, part = "all") %>%
+  padding(padding = 1, part = "all") %>%
+  merge_v(j = ~ Class) %>%
+  bold(part = "header") %>%
+  set_table_properties(layout = "fixed") %>%
+  width(width = 1.1) %>%
+  width(j = 1:2, width = 1.5)
+
+sect_properties <- prop_section(
+  page_size = page_size(orient = "landscape"),
+  page_margins = page_mar(bottom = 0.5, top = 0.5, right = 0.5, left = 0.5),
+  type = "continuous"
+)
+
+save_as_docx(
+  ft_compact, 
+  path = "Results/CR_Ecoli_AMR_Results_Final_Fit.docx",
+  pr_section = sect_properties
 )

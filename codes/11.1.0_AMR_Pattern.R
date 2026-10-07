@@ -1,11 +1,9 @@
-# k y---
-  title: "Descriptive analysis of AMR data"
-author: "Madelaine Norström"
-date: "2025-10-14"
-output:
-  pdf_document: default
-html_document: default
----
+
+ # title: "Descriptive analysis of AMR data"
+#author: "Madelaine Norström"
+#date: "2025-10-14"
+
+
 library(tidyverse)  # for data manipulation and visualization
 library(readxl)     # for reading Excel files)
 
@@ -48,18 +46,23 @@ binom.test(10,90, p = 0.5, "two.sided", conf.level = 0.95)$conf.int*100
 # This means that the % resistance are 11.1% but it can be anywhere between 5.5% to 19.5%.
 # The example below use the original data from Maulid, so you need to change and read in your correct dataset as well as change the variable names to reflect your own dataset: like ID and ORGANISM to your throughout the code, so read carefully and change accordingly.
 
-joined_data <- read_csv("data/CLEANED_DATA/UniqueData.csv")
+#joined_data <- read_csv("data/CLEANED_DATA/UniqueData.csv")
+joined_data <- read_csv("data/CLEANED_DATA/joined_data_16.3.26.csv")
+spec(joined_data)
+names(joined_data)
 
 # Renaming the column
-joined_data <- joined_data %>%
-  rename(INIKA_ID = INIKA_ID.x,
-         REGION = REGION.x,
-         SEASON = SEASON.x,
-         ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE.x,
-         Isolate = Isolate.x)
+# joined_data <- joined_data %>%
+#   rename(INIKA_ID = INIKA_ID.x,
+#          REGION = REGION.x,
+#          SEASON = SEASON.x,
+#          ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE.x,
+#          Isolate = Isolate.x)
 
 ## Importing the E.coli_ECOFF_EUCAST break point file 
-ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx")
+#ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx")
+
+ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_E.coli_K.pneumoniae.xlsx")
 
 EPI_CUTOFF <- ECOFF_EUCAST_BREAK_POINT
 
@@ -70,7 +73,7 @@ calculate_ecoli_esbl_susceptibility <- function(joined_data, EPI_CUTOFF) {
   # FIX: Combine select and rename for clarity, and use clean column names.
   Data <- joined_data %>%
     select(
-      INIKA_ID, REGION, SEASON, ORIGIN_OF_SAMPLE, Isolate, VITEK_MS_Results, ESBL,
+      INIKA_ID.x.x, REGION, SEASON, ORIGIN_OF_SAMPLE.x, Isolate, VITEK_MS_Results, ESBL,
       Amoxicillin = AMX_ED10,
       Azithromycin = AZM_ED15,
       Ceftriaxone = CRO_ED30,
@@ -88,6 +91,16 @@ calculate_ecoli_esbl_susceptibility <- function(joined_data, EPI_CUTOFF) {
       # Renaming to a syntactically valid name:
       Cefotaxime_ClavulanicAcid = CTC_ED30
     )
+  
+  Data %>%
+    select(
+      Amoxicillin,
+      Azithromycin,
+      Ceftriaxone,
+      Ciprofloxacin
+    ) %>%
+    head()
+  str(Data)
   
   # 2. Pivot the drug columns into long format
   # The cols = -c(...) correctly excludes the listed identifier/grouping columns.
@@ -199,21 +212,27 @@ calculate_ecoli_esbl_susceptibility <- function(joined_data, EPI_CUTOFF) {
   
   # 1. Select relevant columns and rename drug columns for clarity
   # NOTE: The 'distinct(INIKA_ID, .keep_all = TRUE)' line is intentionally omitted here
+ # 30.09.26 Need to filter so we don't include the data where we don't have the AST testing
   Data <- joined_data %>%
     select(
-      INIKA_ID, REGION, SEASON, ORIGIN_OF_SAMPLE, Isolate, VITEK_MS_Results, ESBL,
+      INIKA_ID, REGION, SEASON, ORIGIN_OF_SAMPLE, Isolate, VITEK_MS_Results, ESBL,PROTOCOL,
       Amoxicillin = AMX_ED10, Azithromycin = AZM_ED15, Ceftriaxone = CRO_ED30,
       Ciprofloxacin = CIP_ED5, Doxycycline = DOX_ED30, Florfenicol = FLR_ED30,
       Gentamicin = GEN_ED10, Meropenem = MEM_ED10, Oxytetracycline = OXY_ED30,
       Polymyxin_B_PB = POL_ED300, Sulfamethoxazole_Trimethoprim = SXT_ED1_2,
       Cefotaxime = CTX_ED5, Cefotaxime_ClavulanicAcid = CTC_ED30
-    )
+    )%>%
+    filter(!is.na(VITEK_MS_Results))
   
-  # 2. Pivot the drug columns into long format
+  
+  # 2. Pivot the drug columns into long formatAMR_Data <- Data %>%
+  
+  
   AMR_Data <- Data %>%
     pivot_longer(
       cols = -c(INIKA_ID, VITEK_MS_Results, Isolate, REGION, SEASON,
-                ORIGIN_OF_SAMPLE, ESBL),
+                ORIGIN_OF_SAMPLE, ESBL, PROTOCOL
+                ),
       names_to = "Antimicrobial_substance",
       values_to = "value"
     )
@@ -226,6 +245,7 @@ calculate_ecoli_esbl_susceptibility <- function(joined_data, EPI_CUTOFF) {
   
   # --- Step 4: Filter, Clean, and Classify Susceptibility (S/I/R) ---
   
+  # 30.09.26 This doesn't work becuase the variableis called Antimicrobial substance!
   Ecoli_ESBL_Susceptibility <- AMR_Cutoff %>%
     
     # PRECISE FILTER IMPLEMENTATION:
@@ -235,8 +255,15 @@ calculate_ecoli_esbl_susceptibility <- function(joined_data, EPI_CUTOFF) {
       # Condition 2: VITEK_MS_Results MUST be Escherichia coli
       VITEK_MS_Results == "Escherichia coli",
       # Condition 3: ESBL must be 1
-      ESBL == 1
-    ) %>%
+      ESBL == 1,
+      # Condition 4: PROTOCOL must be CGR3
+      PROTOCOL == "CGR3",
+      # Condition 5: Ceftriaxone must be less than 23
+     
+        Antimicrobial_substance == "Ceftriaxone" &
+          value < 23
+      ) %>%
+     
     
     # Clean the S and R cutoff columns and convert all key values to numeric
     mutate(
@@ -328,6 +355,150 @@ ECO_AMR_Pattern <- calculate_ecoli_esbl_susceptibility(joined_data, EPI_CUTOFF)
 
 write_tsv(ECO_AMR_Pattern, "Results/131_Obs_ECO_AMR_Pattern.tsv")
 ###############################################################################
+# 26.09.26
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(flextable)
+library(officer)
+
+# calculate_ecoli_esbl_susceptibility <- function(joined_data, EPI_CUTOFF) {
+#   
+#   # Ensure export folder exists
+#   if (!dir.exists("Results")) {
+#     dir.create("Results")
+#   }
+#   
+#   # --- Step 1: Select relevant columns and rename drug columns ---
+#   Data <- joined_data %>%
+#     select(
+#       INIKA_ID, REGION, SEASON, ORIGIN_OF_SAMPLE, Isolate, VITEK_MS_Results, ESBL, PROTOCOL,
+#       Amoxicillin = AMX_ED10, Azithromycin = AZM_ED15, Ceftriaxone = CRO_ED30,
+#       Ciprofloxacin = CIP_ED5, Doxycycline = DOX_ED30, Florfenicol = FLR_ED30,
+#       Gentamicin = GEN_ED10, Meropenem = MEM_ED10, Oxytetracycline = OXY_ED30,
+#       Polymyxin_B_PB = POL_ED300, Sulfamethoxazole_Trimethoprim = SXT_ED1_2,
+#       Cefotaxime = CTX_ED5, Cefotaxime_ClavulanicAcid = CTC_ED30
+#     )
+#   
+#   # --- Step 2: Pivot drug columns into long format ---
+#   AMR_Data <- Data %>%
+#     pivot_longer(
+#       cols = -c(INIKA_ID, VITEK_MS_Results, Isolate, REGION, SEASON,
+#                 ORIGIN_OF_SAMPLE, ESBL, PROTOCOL),
+#       names_to = "Antimicrobial_substance",
+#       values_to = "value"
+#     )
+#   
+#   # --- Step 3: Join with Cutoff Table & Apply Precise Filtering ---
+#   AMR_Cutoff <- left_join(AMR_Data, EPI_CUTOFF, by = "Antimicrobial_substance")
+#   
+#   Ecoli_ESBL_Susceptibility <- AMR_Cutoff %>%
+#     filter(
+#       Isolate %in% c("E.coli", "K.pneumoniae"),
+#       VITEK_MS_Results == "Escherichia coli",
+#       ESBL == 1,
+#       PROTOCOL == "CGR3"
+#     ) %>%
+#     mutate(
+#       S_Cleaned = str_replace_all(S, "[^0-9.]", ""),
+#       R_Cleaned = str_replace_all(R, "[^0-9.]", ""),
+#       Measured_Zone = as.numeric(str_trim(value)),
+#       S_Cutoff = as.numeric(S_Cleaned),
+#       R_Cutoff = as.numeric(R_Cleaned)
+#     ) %>%
+#     # Filter Ceftriaxone zone diameter < 23 mm
+#     filter(!(Antimicrobial_substance == "Ceftriaxone" & Measured_Zone >= 23)) %>%
+#     # Classify S/I/R
+#     mutate(
+#       Categorical_Result = case_when(
+#         Measured_Zone >= S_Cutoff ~ "S",
+#         Measured_Zone <= R_Cutoff ~ "R",
+#         Measured_Zone > R_Cutoff & Measured_Zone < S_Cutoff ~ "I",
+#         TRUE ~ NA_character_
+#       )
+#     ) %>%
+#     distinct(INIKA_ID, Antimicrobial_substance, .keep_all = TRUE) %>%
+#     filter(!is.na(Categorical_Result), !is.na(Measured_Zone))
+#   
+#   # --- Step 4: Compute Overall Resistance with 95% CI ---
+#   Resistance_Summary <- Ecoli_ESBL_Susceptibility %>%
+#     group_by(Antimicrobial_substance) %>%
+#     summarise(
+#       Total_Tested = n(),
+#       Resistant_Count = sum(Categorical_Result == "R"),
+#       .groups = "drop"
+#     ) %>%
+#     rowwise() %>%
+#     mutate(
+#       Resistant_Pct = round((Resistant_Count / Total_Tested) * 100, 1),
+#       ci_res = list(if(Total_Tested > 0) prop.test(Resistant_Count, Total_Tested, conf.level = 0.95)$conf.int else c(NA, NA)),
+#       CI_Lower = round(ci_res[1] * 100, 1),
+#       CI_Upper = round(ci_res[2] * 100, 1),
+#       `Resistance (n, % [95% CI])` = paste0(
+#         Resistant_Count, " (", Resistant_Pct, "% [", CI_Lower, "-", CI_Upper, "%])"
+#       )
+#     ) %>%
+#     select(Antimicrobial_substance, Total_Tested, `Resistance (n, % [95% CI])`)
+#   
+#   # --- Step 5: Compute % for each Zone (Numbers only, formatted, low-to-high order) ---
+#   Zone_Summary <- Ecoli_ESBL_Susceptibility %>%
+#     group_by(Antimicrobial_substance, Measured_Zone) %>%
+#     summarise(Zone_Count = n(), .groups = "drop_last") %>%
+#     mutate(
+#       Total_For_Drug = sum(Zone_Count),
+#       Raw_Pct = round((Zone_Count / Total_For_Drug) * 100, 1),
+#       # Format: Drop trailing .0 if integer
+#       Zone_Pct_Formatted = if_else(Raw_Pct %% 1 == 0, as.character(as.integer(Raw_Pct)), sprintf("%.1f", Raw_Pct))
+#     ) %>%
+#     ungroup() %>%
+#     select(Antimicrobial_substance, Measured_Zone, Zone_Pct_Formatted) %>%
+#     pivot_wider(
+#       names_from = Measured_Zone,
+#       values_from = Zone_Pct_Formatted,
+#       values_fill = "0"
+#     )
+#   
+#   # Sort zone columns numerically from lowest to highest
+#   zone_cols <- setdiff(names(Zone_Summary), "Antimicrobial_substance")
+#   sorted_zone_cols <- as.character(sort(as.numeric(zone_cols)))
+#   Zone_Summary <- Zone_Summary %>%
+#     select(Antimicrobial_substance, all_of(sorted_zone_cols))
+#   
+#   # --- Step 6: Merge Final Table ---
+#   Final_Table <- left_join(Resistance_Summary, Zone_Summary, by = "Antimicrobial_substance") %>%
+#     rename(
+#       `Antimicrobial Substance` = Antimicrobial_substance,
+#       `Total Tested (N)` = Total_Tested
+#     )
+#   
+#   # --- Step 7: Export to Publication-Ready Word Document (Landscape) ---
+#   ft <- flextable(Final_Table) %>%
+#     theme_booktabs() %>%
+#     fontsize(size = 7.5, part = "all") %>%
+#     padding(padding.top = 2, padding.bottom = 2, padding.left = 1, padding.right = 1, part = "all") %>%
+#     align(j = 2:ncol(Final_Table), align = "center", part = "all") %>%
+#     bold(part = "header") %>%
+#     autofit() %>%
+#     fit_to_width(max_width = 10)  # Ensures entire table stays inside landscape margins (10 inches width)
+#   
+#   # Create Word document with landscape page setup
+#   doc <- read_docx() %>%
+#     body_end_section_landscape() %>%
+#     body_add_par("Table: Overall Resistance with 95% CI and Zone Diameter Distribution (%) for Confirmed ESC Resistant E. coli", style = "heading 1") %>%
+#     body_add_flextable(ft) %>%
+#     body_end_section_landscape()
+#   
+#   # Save File
+#   file_path <- "Results/ESC_Resistant_Ecoli_AMR_Pattern.docx"
+#   print(doc, target = file_path)
+#   cat("\nReport successfully saved in Landscape mode to:", file_path, "\n")
+#   
+#   return(Final_Table)
+# }
+# 
+# # --- Function Execution ---
+# ECO_AMR_Pattern <- calculate_ecoli_esbl_susceptibility(joined_data, EPI_CUTOFF)
+###################################################################
 # Statistical analyses
 
 # Load required libraries
@@ -782,8 +953,10 @@ calculate_ecoli_esbl_susceptibility_modified <- function(joined_data, EPI_CUTOFF
  
  # Importing the K.pneumoniae_ECOFF_EUCAST break point file
  
- ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx", sheet = 2)
+ #ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx", sheet = 2)
  
+ ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_E.coli_K.pneumoniae.xlsx", 
+                                         sheet = "K.pneumoniae_ECOFF_EUCAST")
  
  EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
  
@@ -1026,9 +1199,10 @@ calculate_ecoli_esbl_susceptibility_modified <- function(joined_data, EPI_CUTOFF
  library(DescTools)
   ## Importing the K.pneumoniae_ECOFF_EUCAST break point file
   
-  ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx", sheet = 2)
+  #ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_EUCAST.xlsx", sheet = 2)
   
-  
+ ECOFF_EUCAST_BREAK_POINT <- read_excel("data/ECOFF_E.coli_K.pneumoniae.xlsx", 
+                                        sheet = "K.pneumoniae_ECOFF_EUCAST")
   EPI_CUTOFF<-ECOFF_EUCAST_BREAK_POINT
   
   # 

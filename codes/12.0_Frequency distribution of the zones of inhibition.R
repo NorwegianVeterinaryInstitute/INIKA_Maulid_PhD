@@ -3,6 +3,8 @@ library(readxl)     # for reading Excel files)
 library(dplyr)
 library(tidyr)
 library(readr)
+library(flextable) # For publication-quality tables
+library(officer)   # For exporting flextables to Microsoft Word
 
 joined_data <- read_csv("data/CLEANED_DATA/UniqueData.csv")
 spec(joined_data)
@@ -122,8 +124,8 @@ write_tsv(Ecoli_percent_table_filtered, "Results/131_Obs_Ecoli_antibiotics_perce
 Ecoli_filtered_for_zones <- joined_datamm %>%
   filter(
     Isolate == "E.coli" & 
-      VITEK_MS_Results == "Escherichia coli" & 
-      Cefotaxime < 21
+      VITEK_MS_Results == "Escherichia coli" & Ceftriaxone < 23
+     # Cefotaxime < 21
   )
 
 # 2. Data Cleaning and Long Format
@@ -185,6 +187,127 @@ print(Ecoli_final_report)
 # Save as Excel (Best for reports)
 write_xlsx(Ecoli_final_report, "Results/20_12_25Ecoli_final_report.xlsx")
 ################################################################################
+
+# 1. Filtering Logic
+Ecoli_filtered_for_zones <- joined_datamm %>%
+  filter(
+    Isolate == "E.coli" & 
+      VITEK_MS_Results == "Escherichia coli" & Ceftriaxone < 23
+    # Cefotaxime < 21
+  )
+
+# 2. Data Cleaning and Long Format
+Ecoli_long <- Ecoli_filtered_for_zones %>%
+  mutate(across(all_of(tested_antibiotics), as.numeric)) %>%
+  pivot_longer(
+    cols = all_of(tested_antibiotics),
+    names_to = "substance",
+    values_to = "value"
+  ) %>%
+  filter(!is.na(value)) %>%
+  mutate(substance = str_to_title(str_trim(substance)))
+
+# 3. Calculate Summary: Total Isolates and a single 95%CI column
+Ecoli_summary <- Ecoli_long %>%
+  group_by(substance) %>%
+  summarise(
+    Total_Isolates = n(),
+    # Calculating the 95% percentile interval for the zones
+    L = round(quantile(value, 0.025, na.rm = TRUE), 1),
+    U = round(quantile(value, 0.975, na.rm = TRUE), 1),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Clean formatting: remove .0 from the CI bounds
+    L_str = sub("\\.0$", "", sprintf("%.1f", L)),
+    U_str = sub("\\.0$", "", sprintf("%.1f", U)),
+    `95% CI` = paste0(L_str, "-", U_str)
+  ) %>%
+  select(substance, Total_Isolates, `95% CI`)
+
+# 4. Calculate Zone Distribution (Percentages with clean formatting)
+Ecoli_dist_wide <- Ecoli_long %>%
+  count(substance, value) %>%
+  group_by(substance) %>%
+  mutate(pct = round((n / sum(n)) * 100, 1)) %>%
+  ungroup() %>%
+  mutate(
+    # Clean formatting: remove .0 from percentages
+    pct_str = sub("\\.0$", "", sprintf("%.1f", pct)),
+    value = as.numeric(value)
+  ) %>%
+  select(substance, value, pct_str) %>%
+  arrange(value) %>%
+  pivot_wider(
+    names_from = value,
+    values_from = pct_str,
+    values_fill = "0"
+  )
+
+# 5. Final Join: One row per antibiotic
+Ecoli_final_report <- Ecoli_summary %>%
+  left_join(Ecoli_dist_wide, by = "substance") %>%
+  rename(
+    `Antibiotic/Substance` = substance,
+    `Total Isolates` = Total_Isolates
+  )
+
+# ----------------------------------------------------------------------
+# 6. Formatting for Publication and Saving to Word (.docx)
+# ----------------------------------------------------------------------
+
+# Convert data frame to a formatted flextable
+pub_table <- flextable(Ecoli_final_report) %>%
+  # Apply publication style theme (APA style rules)
+  theme_booktabs() %>%
+  # Compact typography to ensure high column density fits on one page
+  font(fontname = "Times New Roman", part = "all") %>%
+  fontsize(size = 9, part = "body") %>%
+  fontsize(size = 9, part = "header") %>%
+  # Alignment
+  align(j = 1, align = "left", part = "all") %>%
+  align(j = 2:ncol(Ecoli_final_report), align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  # Reduce padding around cell borders to save vertical & horizontal space
+  padding(padding.top = 2, padding.bottom = 2, 
+          padding.left = 3, padding.right = 3, part = "all") %>%
+  # Scale table to fit the exact width of the landscape printable area (10 inches)
+  fit_to_width(max_width = 10)
+
+# Add academic table title
+pub_table <- set_caption(
+  pub_table, 
+  caption = "Table 1. E. coli Inhibition Zone Diameters (95% CI) and Zone Size Percentage Distributions."
+)
+
+# Define section properties (Landscape with 0.5-inch margins)
+sect_prop <- prop_section(
+  page_size = page_size(orient = "landscape", width = 8.5, height = 11),
+  page_margins = page_mar(top = 0.5, bottom = 0.5, left = 0.5, right = 0.5),
+  type = "continuous"
+)
+
+# Create a valid block_section wrapper object
+landscape_block <- block_section(sect_prop)
+
+# Build the Word document
+doc <- read_docx() %>%
+  body_add_flextable(pub_table) %>%
+  body_end_block_section(landscape_block)
+
+# Ensure 'Results' directory exists
+if (!dir.exists("Results")) {
+  dir.create("Results")
+}
+
+# Export the Word file
+print(doc, target = "Results/20_12_25Ecoli_final_report.docx")
+
+# Save as Excel (Optional backup)
+write_xlsx(Ecoli_final_report, "Results/20_12_25Ecoli_final_report.xlsx")
+
+cat("\n--- Publication-ready Word document saved (Landscape, 1 Page) ---\n")
+##################################################
 # ## Klebsiella ----
 # ### Transforming to long format ----
 # Klebsiella_all_long <-

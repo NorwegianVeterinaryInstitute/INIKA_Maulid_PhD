@@ -125,7 +125,7 @@ not_interesting <- c("0")
 
   # Filter logic
   filtered_unique <- unik_DATA%>%
-  group_by(INIKA_ID) %>%
+  group_by(INIKA_ID.x) %>%
   filter(
     # Keep all rows if there's only one per isolate_ID
     n() == 1 |
@@ -136,7 +136,7 @@ not_interesting <- c("0")
 
 
   filtered_unique_counts<-filtered_unique%>%
-    add_count(INIKA_ID, name = "Isolate_Count")
+    add_count(INIKA_ID.x, name = "Isolate_Count")
 
   # Total observations 784: From this it will only be 781 unique persons ( samples)
   #Note there are 2 isolates both Klebsiella and E.coli from the same person, 
@@ -279,5 +279,5 @@ prevalence_table_ECO <- prevalence_table %>%
 write.csv(prevalence_table_ECO, "ECO_prevalence_summary.csv", row.names = FALSE)
 
 # View the table
-print(ECO_prevalence_table)
+print(prevalence_table_ECO)
   

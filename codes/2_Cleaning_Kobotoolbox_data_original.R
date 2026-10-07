@@ -9,6 +9,7 @@ library(readxl)     # for reading Excel files)
 
 
 ## Importing the original KOBOTOOLBOX data
+
 KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_2025_06_12_18_24_20 <- 
   read_excel("data/KOBOTOOLBOX_INIKA_SAMPLING_ANALYSIS_HUMAN_-_2025-06-12-18-24-20.xlsx",
              na = c("","NA"))
@@ -140,98 +141,13 @@ head(Demographic_cleaned_data)
 
 # 2204 unique Ids remained after removing one duplicate
 
-### Saving the file
 #26-11-25 check so I don't write out new files unless finding a mistake somewhere!
-#write_tsv(Demographic_cleaned_data, "data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.tsv")
+### Saving the file
 
-#saveRDS(Demographic_cleaned_data, "data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.rds")
+write_tsv(Demographic_cleaned_data, "data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.tsv")
 
-#write.csv(Demographic_cleaned_data, "data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.csv")
+saveRDS(Demographic_cleaned_data, "data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.rds")
+
+write.csv(Demographic_cleaned_data, "data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.csv")
 
 #######################################################################################################
-# # Clean up and remove this to a separate code file call (Can have everything in one file)
-#  
-#  ## Importing the data set for drawing a table
-#  Demographic_cleaned_data <- read_csv("data/CLEANED_DATA/2_Demographic_cleaned_data-2025-10-07.csv")
-#  
-#  # Define Age Bins and Create the Summary Table
-#  summary_table <- Demographic_cleaned_data %>%
-#    
-#    # Create the Age Range column using the 'Age_yrs' column
-#    mutate(`Age Range` = cut(Age_yrs,
-#                             breaks = c(10, 18, 28, 38, 48, 58, 68, 78, 89), # 89 ensures 78-88 is captured
-#                             labels = c('10 - 17', '18 - 27', '28 - 37', '38 - 47', 
-#                                        '48 - 57', '58 - 67', '68 - 77', '78 - 88'),
-#                             right = FALSE)) %>% # 'right = FALSE' makes the lower bound inclusive
-#    
-#    # Group by all requested demographic variables and the new age range
-#    group_by(REGION, DISTRICT, GENDER, SEASON, ORIGIN_OF_SAMPLE, `Age Range`) %>%
-#    
-#    # Count the number of observations (rows) for each group,
-#    #    as an explicit 'Total' column was not provided.
-#    summarise(`Total Count` = n()) %>%
-#    
-#    # Remove grouping structure
-#    ungroup()
-#  
-#  # Print the resulting table
-#  print(summary_table)
-#  
-#  
-#  # Optional: Write the resulting table to a new CSV file
-# write_csv(summary_table, 
-#           "Results/Demographic_Summary_Table_Final.csv")
-# 
-# 
-# 
-# # Compute the Interquartile Range (IQR) 
-# # The na.rm = TRUE argument ensures that missing values are ignored in the calculation.
-# iqr_age <- IQR(Demographic_cleaned_data$Age_yrs, na.rm = TRUE)
-# 
-# # Print the result
-# print(paste("The Interquartile Range (IQR) of Age_yrs is:", iqr_age))
-# 
-# 
-# 
-# ## Install and Load Necessary Libraries 
-# 
-# install.packages("leaflet")
-# 
-# library(dplyr)
-# library(tidyr)
-# library(leaflet)
-# 
-# 
-# 
-# 
-# #Drawing a map
-# 
-# map_data <- Demographic_cleaned_data %>%
-#   # Rename columns 7 and 8 for clarity in the map code
-#   rename(
-#     latitude = 7,  # Column number 7 as Latitude
-#     longitude = 8  # Column number 8 as Longitude
-#   ) %>%
-#   # Ensure both columns are treated as numeric
-#   mutate(
-#     latitude = as.numeric(latitude),
-#     longitude = as.numeric(longitude)
-#   ) %>%
-#   # Remove any rows where conversion failed or coordinates are missing (NA)
-#   filter(!is.na(latitude) & !is.na(longitude))
-# 
-# # 2. Draw the Interactive Map using Leaflet
-# map_leaflet <- map_data %>%
-#   leaflet() %>%
-#   # Add a base map layer (OpenStreetMap is a good default)
-#   addTiles() %>%
-#   # Add markers for each GPS coordinate in your dataset
-#   addMarkers(
-#     lat = ~latitude,
-#     lng = ~longitude,
-#     # Optional: Add a popup showing the coordinates when a marker is clicked
-#     popup = ~paste("Lat:", latitude, "<br>Lng:", longitude)
-#   )
-# 
-# # 3. Display the map
-# map_leaflet

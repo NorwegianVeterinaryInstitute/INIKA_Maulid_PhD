@@ -25,7 +25,7 @@ JoinedDATA <-JoinedDATA %>%
          -"Isolate_ID_repeat_count.y", -"Isolate_ID_row_count.y",   
          -"DISTRICT.y.y", -"SEASON.y.y", -"ORIGIN_OF_SAMPLE.y", -"INIKA_ID.y",
           -"SAMPLE FROM.x",
-         -"Isolate",-"INIKA_ID",-"AGE")
+         -"Isolate.y",-"INIKA_ID.y",-"AGE")
 # Rename the columns
 JoinedDATA <-JoinedDATA %>%
   rename(INIKA_ID = `INIKA_ID.x`,DISTRICT = `DISTRICT.x`,AGE = `Age_yrs`,
@@ -45,13 +45,13 @@ JoinedDATA <-JoinedDATA %>%
          SIM_Media_Indole = `SIM Media Indole.x`,
          SIM_Media_Motility= `SIM Media Motility.x`,
          CITRATE = `CITRATE.x`, UREASE = `UREASE.x`,
-         Isolate = `Isolate.y`, Freezing_ID_No = `Freezing_ID_No.x`,
+         Isolate = `Isolate.x`, Freezing_ID_No = `Freezing_ID_No.x`,
          INIKA_prefix = `INIKA_prefix.x`,
          Isolate_suffix = `Isolate_suffix.x`,
-         Isolate_ID_repeat_count =`Isolate_ID_repeat_count.x`,
-         Isolate_ID_row_count = `Isolate_ID_row_count.x`,
         
          )
+
+
 ## I identified some of the data are missing
 ## Solution; Cleaning the data set
 
@@ -938,3 +938,229 @@ Summary_Overall <- JoinedDATA %>%
   arrange(desc(Count))
 
 print(Summary_Overall)
+##############################################
+## Supplementary table 1. Occurrence of Isolates %
+# ==============================================================================
+# STEP 1: INITIAL SETUP & HELPER FUNCTIONS
+# ==============================================================================
+
+if (!dir.exists("Results")) {
+  dir.create("Results")
+}
+
+# Target isolates vector
+target_isolates <- c("E.coli", "K.pneumoniae", "K.aerogenes", 
+                     "K.oxytoca", "S.typhimurium", "S.typhi", "S.paratyphi A")
+
+# ==============================================================================
+# STEP 2: DATA PREPARATION & DEDUPLICATION BY INIKA_ID
+# ==============================================================================
+
+cleaned_data <- JoinedDATA %>%
+  filter(!is.na(INIKA_ID), !is.na(Isolate), trimws(Isolate) != "") %>%
+  mutate(
+    Isolate_Group = if_else(Isolate %in% target_isolates, Isolate, "Others")
+  ) %>%
+  arrange(INIKA_ID, Isolate) %>%
+  distinct(INIKA_ID, Isolate_Group, .keep_all = TRUE)
+
+# Calculate Total Unique Study Participants (Overall Denominator)
+total_participants <- n_distinct(cleaned_data$INIKA_ID)
+
+# Identify non-target species for footnote definition
+others_species <- JoinedDATA %>%
+  filter(!Isolate %in% target_isolates, !is.na(Isolate), trimws(Isolate) != "") %>%
+  pull(Isolate) %>%
+  unique() %>%
+  sort()
+
+others_key_text <- if (length(others_species) > 0) {
+  paste("Others include:", paste(others_species, collapse = ", "))
+} else {
+  "Others include: No other bacterial species isolated."
+}
+
+# Row ordering for Bacterial Isolates
+ordered_isolates <- c(target_isolates[target_isolates %in% unique(cleaned_data$Isolate_Group)], "Others")
+
+# Ordered District levels (Kilimanjaro districts A-Z, then Mwanza districts A-Z)
+district_order <- cleaned_data %>%
+  filter(!is.na(DISTRICT), !is.na(REGION)) %>%
+  distinct(REGION, DISTRICT) %>%
+  mutate(REGION = factor(REGION, levels = c("Kilimanjaro", "Mwanza"))) %>%
+  arrange(REGION, DISTRICT) %>%
+  pull(DISTRICT) %>%
+  unique()
+
+# ==============================================================================
+# STEP 3: RECTIFIED SAFE DENOMINATOR COMPUTATION
+# ==============================================================================
+
+get_safe_denom <- function(df, var_name, val) {
+  if (!var_name %in% colnames(df)) return(0)
+  n <- df %>%
+    filter(!is.na(.data[[var_name]]), as.character(.data[[var_name]]) == val) %>%
+    summarise(N = n_distinct(INIKA_ID)) %>%
+    pull(N)
+  if (length(n) == 0 || is.na(n)) 0 else n
+}
+
+# Denominators list matching exact values in your dataset
+denoms <- list(
+  Overall          = total_participants,
+  `Outpatient`     = get_safe_denom(cleaned_data, "ORIGIN_OF_SAMPLE", "Outpatient"),
+  `Schoolchildren` = get_safe_denom(cleaned_data, "ORIGIN_OF_SAMPLE", "Schoolchildren"),
+  Dry              = get_safe_denom(cleaned_data, "SEASON", "Dry"),
+  Wet              = get_safe_denom(cleaned_data, "SEASON", "Wet"),
+  Kilimanjaro      = get_safe_denom(cleaned_data, "REGION", "Kilimanjaro"),
+  Mwanza           = get_safe_denom(cleaned_data, "REGION", "Mwanza")
+)
+
+# Append dynamic district denominators
+for (dst in district_order) {
+  denoms[[dst]] <- get_safe_denom(cleaned_data, "DISTRICT", dst)
+}
+
+# Define strata specifications (Column Name, Category Value)
+strata_specs <- list(
+  c("ORIGIN_OF_SAMPLE", "Outpatient"),
+  c("ORIGIN_OF_SAMPLE", "Schoolchildren"),
+  c("SEASON", "Dry"),
+  c("SEASON", "Wet"),
+  c("REGION", "Kilimanjaro"),
+  c("REGION", "Mwanza")
+)
+
+for (dst in district_order) {
+  strata_specs[[length(strata_specs) + 1]] <- c("DISTRICT", dst)
+}
+
+# ==============================================================================
+# STEP 4: VECTORIZED SUBGROUP CALCULATION
+# ==============================================================================
+
+calc_subgroup_counts <- function(df, var_name, val, denom) {
+  if (!var_name %in% colnames(df)) {
+    return(tibble(Isolate_Group = ordered_isolates, !!val := "0 (0%)"))
+  }
+  
+  df_sub <- df %>%
+    filter(!is.na(.data[[var_name]]), as.character(.data[[var_name]]) == val)
+  
+  res <- tibble(Isolate_Group = ordered_isolates) %>%
+    left_join(
+      df_sub %>%
+        group_by(Isolate_Group) %>%
+        summarise(Subgroup_Count = n_distinct(INIKA_ID), .groups = "drop"),
+      by = "Isolate_Group"
+    ) %>%
+    mutate(
+      Subgroup_Count = replace_na(Subgroup_Count, 0),
+      pct = if (denom > 0) (Subgroup_Count / denom) * 100 else 0,
+      pct_str = sub("\\.0$", "", sprintf("%.1f", pct)),
+      val_fmt = sprintf("%d (%s%%)", Subgroup_Count, pct_str)
+    ) %>%
+    select(Isolate_Group, !!val := val_fmt)
+  
+  return(res)
+}
+
+# --- FIX: Calculate Overall Column with accurate scalar denominator ---
+overall_denom <- denoms[["Overall"]]
+
+overall_counts <- tibble(Isolate_Group = ordered_isolates) %>%
+  left_join(
+    cleaned_data %>%
+      group_by(Isolate_Group) %>%
+      summarise(Subgroup_Count = n_distinct(INIKA_ID), .groups = "drop"),
+    by = "Isolate_Group"
+  ) %>%
+  mutate(
+    Subgroup_Count = replace_na(Subgroup_Count, 0),
+    pct = if (overall_denom > 0) (Subgroup_Count / overall_denom) * 100 else 0,
+    pct_str = sub("\\.0$", "", sprintf("%.1f", pct)),
+    Overall = sprintf("%d (%s%%)", Subgroup_Count, pct_str)
+  ) %>%
+  select(Isolate_Group, Overall)
+
+# Assemble wide dataframe
+summary_wide <- overall_counts
+
+for (spec in strata_specs) {
+  v_name <- spec[1]
+  v_val  <- spec[2]
+  denom  <- pluck(denoms, v_val, .default = 0)
+  
+  res <- calc_subgroup_counts(cleaned_data, v_name, v_val, denom)
+  summary_wide <- summary_wide %>% left_join(res, by = "Isolate_Group")
+}
+
+summary_wide <- summary_wide %>%
+  mutate(across(-Isolate_Group, ~ replace_na(.x, "0 (0%)")))
+# ==============================================================================
+# STEP 5: FLEXTABLE CONSTRUCTION WITH TWO-TIER SPANNERS
+# ==============================================================================
+
+col_keys <- colnames(summary_wide)
+
+header_df <- tibble(
+  col_keys = col_keys,
+  Bottom_Header = c(
+    "Bacterial Isolate",
+    sprintf("Overall\n(N = %d)", denoms[["Overall"]]),
+    sprintf("Outpatient\n(N = %d)", denoms[["Outpatient"]]),
+    sprintf("Schoolchildren\n(N = %d)", denoms[["Schoolchildren"]]),
+    sprintf("Dry\n(N = %d)", denoms[["Dry"]]),
+    sprintf("Wet\n(N = %d)", denoms[["Wet"]]),
+    sprintf("Kilimanjaro\n(N = %d)", denoms[["Kilimanjaro"]]),
+    sprintf("Mwanza\n(N = %d)", denoms[["Mwanza"]]),
+    map_chr(district_order, ~ sprintf("%s\n(N = %d)", .x, denoms[[.x]]))
+  )
+)
+
+ft_table <- flextable(summary_wide) %>%
+  set_header_df(mapping = header_df, key = "col_keys") %>%
+  merge_h(part = "header") %>%
+  merge_v(j = 1, part = "header") %>%
+  theme_booktabs() %>%
+  bold(part = "header") %>%
+  align(j = -1, align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  italic(i = ~ Isolate_Group != "Others", j = "Isolate_Group") %>%
+  bold(i = ~ Isolate_Group == "Others", j = "Isolate_Group") %>%
+  set_caption(
+    caption = as_paragraph(
+      as_chunk("Table 1: Occurrence Frequency of Bacterial Isolate Carriage Stratified by Origin of Sample, Season, Region, and District", 
+               props = fp_text(font.family = "Times New Roman", font.size = 10, bold = TRUE))
+    ),
+    word_stylename = "Table Caption"
+  ) %>%
+  add_footer_lines(
+    values = c(
+      "Note: Data are presented as frequency and percentage, n (%). Denominators (N) represent unique study participants (INIKA_ID) per respective category.",
+      others_key_text
+    )
+  ) %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  fontsize(size = 8.5, part = "all") %>%
+  autofit()
+
+# ==============================================================================
+# STEP 6: EXPORT TO WORD IN LANDSCAPE
+# ==============================================================================
+
+sect_properties <- prop_section(
+  page_size = page_size(orient = "landscape", width = 11.69, height = 8.27),
+  type = "continuous",
+  page_margins = page_mar(top = 0.5, bottom = 0.5, left = 0.5, right = 0.5)
+)
+
+doc <- read_docx() %>%
+  body_end_section_landscape() %>%
+  body_add_flextable(ft_table) %>%
+  body_set_default_section(sect_properties)
+
+print(doc, target = "Results/Pathogen_Wide_Stratified_Summary.docx")
+
+message("Successfully updated and exported to Results/Pathogen_Wide_Stratified_Summary.docx")
+#################################################################################

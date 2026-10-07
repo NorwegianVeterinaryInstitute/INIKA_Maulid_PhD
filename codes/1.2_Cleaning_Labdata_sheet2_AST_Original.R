@@ -13,6 +13,7 @@ library(readxl)     # for reading Excel files)
 
 ## Importing the DRY_RAINY_MWZ_KILIMANJARO_AST2 file ----
 # Might have been checked , but Madelaine like to check again later! 17.10.25
+# Project data path
 
 DRY_RAINY_MWZ_KILIMANJARO_AST2 <- 
   read_excel("data/DRY_RAINY_MWZ_KILIMANJARO.xlsx", 
@@ -162,11 +163,12 @@ Selection<-
 #26.11.2025 Check not writing out new files
 ## Saving the file as tsv to be opened in excel format
 #write_tsv(Selection, "data/CLEANED_DATA/Selection-2026-19-07.tsv")
+
 write_tsv(Selection, "data/CLEANED_DATA/Selection-2026-03-11.tsv")
 
 # Save as rds to be used further work in R
 #saveRDS(Selection, "data/CLEANED_DATA/Selection-2025-10-07.rds")
-saveRDS(Selection, "data/CLEANED_DATA/Selection-2025-03-11.rds")
+saveRDS(Selection, "data/CLEANED_DATA/Selection-2026-03-11.rds")
 # This one we use for the join in script number 9. Joining..
 ############################################################################
 # ### Now join "Selection" back with " Cleaned_Labdata_Original"

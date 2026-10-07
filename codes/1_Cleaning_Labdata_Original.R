@@ -8,11 +8,14 @@
 library(tidyverse)  # for data manipulation and visualization
 library(readxl)     # for reading Excel files)
 
-## Importing the original lab data
+
 DRY_RAINY_MWZ_KILIMANJARO <- read_excel("data/DRY_RAINY_MWZ_KILIMANJARO.xlsx",
                                         na = c("", "NA")
-                                        )
 
+)
+View(DRY_RAINY_MWZ_KILIMANJARO)
+names(DRY_RAINY_MWZ_KILIMANJARO)
+# 
 
 
 # glimpse(DRY_RAINY_MWZ_KILIMANJARO)
@@ -90,7 +93,7 @@ Cleaned_Labdata_Original <-
 # Trick to select all the columns of type character in Cleaned_Labdata_Original dataset
 Cleaned_Labdata_Original %>%
   select(where(is.character)) %>%
-  # I modify all the columns from character to factor - because I want to see the "levels" : categories
+  # Modify all the columns from character to factor - because I want to see the "levels" : categories
   # to identify if you wrote homogeneously 
   mutate_all(factor) %>%
   # Select one column and look at the levels
@@ -140,7 +143,7 @@ Cleaned_Labdata_Original$Isolate[is.na(Cleaned_Labdata_Original$Isolate)] <- "No
 duplicated_test<-Cleaned_Labdata_Original$Isolate_ID[duplicated(Cleaned_Labdata_Original$Isolate_ID)]
 print(duplicated_test)
 
-#6.12.25 Maulid, I don't see what have been changed? or do you mean # infront?
+
 Cleaned_Labdata_Original <- Cleaned_Labdata_Original %>%
   mutate(
     Isolate_ID = case_when(
@@ -186,7 +189,7 @@ CheckingDuplicates <- Cleaned_Labdata_Original%>%
            c("21303_2_R"))%>%
   select(INIKA_ID, Isolate_ID, Freezing_ID_No,Isolate,REGION, SEASON, `SAMPLE FROM` ) # "1392_1_D", "1395_1_D", "13150_2_D", , "21345_1_R", "22287_1_R", "22315_1_R", "2374_1_D", "23130_1_D"
 
-# Ok_ 8.12.25 Madelaine: Now I see these changes, needs to be included in the rmd script as well!, and make sure it is correct for the joining with Malditof results.
+# Ok_: Now I see these changes, needs to be included in the rmd script as well!, and make sure it is correct for the joining with Malditof results.
 # We detected that there are spelling mistakes in some of the Isolates_Ids as they are not corresponding to the correct INIKA_IDs.
 # Solution: We make a new Isolate_ID calling it Isolate_ID_Corrected, but need to keep the wrong one as well in order to manage to join the data from TVLA (VITEK)
 

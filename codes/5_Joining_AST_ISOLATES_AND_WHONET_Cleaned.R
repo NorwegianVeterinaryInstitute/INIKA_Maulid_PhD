@@ -15,8 +15,8 @@ library(readxl)     # for reading Excel files)
 #AST_ISOLATES <- readRDS("data/CLEANED_DATA/3_AST_ISOLATES-2025-10-08.rds") %>%
   #filter(!Isolate_ID %in% c("13122_1_D", "2395_2_D")) 
   
-## Importing the original WHONET DATA- 1.12.25 I don't import now, use the ones I have cleaned in the previous script 4._
-#WHONET_Cleaned_data <- readRDS("data/CLEANED_DATA/4_WHONET_Cleaned_data-2025-10-08.rds")
+## Importing the original WHONET DATA- 21.09.26- change I don't import now, use the ones I have cleaned in the previous script 4._
+WHONET_Cleaned_data <- readRDS("data/CLEANED_DATA/4_WHONET_Cleaned_data-2026-09-21.rds")
 
 check<-WHONET_Cleaned_data%>%
   filter(Isolate_ID %in% c("13122_1_D", "2395_2_D"))
@@ -72,6 +72,7 @@ print(AST_RESULTS_duplicates)
 #  filter(!Isolate_ID %in% IDs_to_remove)
 
 ## Saving the file for further use
+
 write_tsv(AST_RESULTS, "data/CLEANED_DATA/FINAL_AST_RESULTS.tsv")
 saveRDS(AST_RESULTS, "data/CLEANED_DATA/FINAL_AST_RESULTS.rds")
 
@@ -81,11 +82,14 @@ saveRDS(AST_RESULTS, "data/CLEANED_DATA/FINAL_AST_RESULTS.rds")
 ESBL_ECO <- AST_RESULTS%>%
   filter(VITEK_MS_Results == "Escherichia coli", ESBL_Presumptivefinal == 1) %>%
    count() ## 132- Note this changed from 135 to 132 when including more critera!
+#21.09.26 Now  there is only one left! ## 24.09.26 there are 17 counts
 
 
 ESBL_Kleb <- AST_RESULTS%>%
   filter(VITEK_MS_Results == "Klebsiella pneumoniae", ESBL_Presumptivefinal == 1) %>%
   count() ## 54 
+
+#21.09.26 Now  there is only one left! ## 24.09.26 there are 09 counts
 
 
 

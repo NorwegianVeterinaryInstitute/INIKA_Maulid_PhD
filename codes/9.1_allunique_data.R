@@ -56,9 +56,60 @@ UniqueData <-UniqueData %>%
 ## Select the true ESBL  
 UniqueData <- UniqueData %>%
   mutate(
-    ESBL = if_else(ESBL_Selection >= 5, 1, 0, missing = 0)
-  ) 
-
+    ESBL = if_else(
+      ESBL_Selection >= 5 &
+        CRO_ED30 < 23 &
+        str_detect(PROTOCOL, regex("^CGR3$", ignore_case = TRUE)) &
+        str_detect(VITEK_MS_Results, regex("Escherichia coli|Klebsiella pneumoniae", ignore_case = TRUE)),
+      1,
+      0,
+      missing = 0
+    )
+  )
+# count_esbl <- function(UniqueData) {
+#   
+#   UniqueData %>%
+#     mutate(
+#       # Ensure text columns are clean
+#       across(where(is.character), str_trim),
+#       
+#       # Flag ESBL positive cases based on all 4 criteria
+#       is_esbl = if_else(
+#         ESBL_Selection >= 5 &
+#           CRO_ED30 < 23 &
+#           str_detect(PROTOCOL, regex("^CGR3$", ignore_case = TRUE)) &
+#           str_detect(VITEK_MS_Results, regex("Escherichia coli|Klebsiella pneumoniae", ignore_case = TRUE)),
+#         1,
+#         0,
+#         missing = 0
+#       ),
+#       
+#       # Standardize species names
+#       Species = case_when(
+#         str_detect(VITEK_MS_Results, regex("coli", ignore_case = TRUE)) ~ "Escherichia coli",
+#         str_detect(VITEK_MS_Results, regex("pneumoniae", ignore_case = TRUE)) ~ "Klebsiella pneumoniae",
+#         TRUE ~ "Other"
+#       )
+#     ) %>%
+#     # Filter to unique isolates of target species
+#     filter(Species %in% c("Escherichia coli", "Klebsiella pneumoniae")) %>%
+#     distinct(TVLA_ID, .keep_all = TRUE) %>%
+#     
+#     # Calculate counts and proportions
+#     group_by(Species) %>%
+#     summarise(
+#       Total_Isolates = n(),
+#       ESBL_Count = sum(is_esbl == 1),
+#       Non_ESBL_Count = sum(is_esbl == 0),
+#       ESBL_Percentage = round((ESBL_Count / Total_Isolates) * 100, 1),
+#       .groups = "drop"
+#     )
+# }
+# 
+# esbl_summary <- count_esbl(UniqueData)
+# 
+# # View the results
+# print(esbl_summary)
 # Save the file
 write.csv(UniqueData, "data/CLEANED_DATA/UniqueData.csv")
 
@@ -136,77 +187,77 @@ write_tsv(Kleb_NOT_correct_Identified_VITEK,"data/CLEANED_DATA/Kleb_NOT_correct_
 saveRDS(Kleb_NOT_correct_Identified_VITEK,"data/CLEANED_DATA/Kleb_NOT_correct_Identified_VITEK.rds")
 ################################################################################
 ##MMJ 28/01/2026
-# Create the summary table
-tvla_verification_table <- UniqueData %>%
-  # Filter for only the three isolates of interest
-  filter(Isolate %in% c("E.coli", "K.pneumoniae", "S.typhimurium")) %>%
-  group_by(Isolate) %>%
-  summarise(
-    # Count how many have a TVLA_ID
-    `Tested at TVLA` = sum(!is.na(TVLA_ID), na.rm = TRUE),
-    
-    # Apply specific confirmation criteria for each isolate
-    `Confirmed as per Criteria` = sum(
-      !is.na(TVLA_ID) & (
-        (Isolate == "E.coli" & VITEK_MS_Results == "Escherichia coli") |
-          (Isolate == "K.pneumoniae" & VITEK_MS_Results == "Klebsiella pneumoniae") |
-          (Isolate == "S.typhimurium" & VITEK_MS_Results != "S.typhimurium")
-      ), 
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  )
-
-# View the result
-print(tvla_verification_table)
+# # Create the summary table
+# tvla_verification_table <- UniqueData %>%
+#   # Filter for only the three isolates of interest
+#   filter(Isolate %in% c("E.coli", "K.pneumoniae", "S.typhimurium")) %>%
+#   group_by(Isolate) %>%
+#   summarise(
+#     # Count how many have a TVLA_ID
+#     `Tested at TVLA` = sum(!is.na(TVLA_ID), na.rm = TRUE),
+#     
+#     # Apply specific confirmation criteria for each isolate
+#     `Confirmed as per Criteria` = sum(
+#       !is.na(TVLA_ID) & (
+#         (Isolate == "E.coli" & VITEK_MS_Results == "Escherichia coli") |
+#           (Isolate == "K.pneumoniae" & VITEK_MS_Results == "Klebsiella pneumoniae") |
+#           (Isolate == "S.typhimurium" & VITEK_MS_Results != "S.typhimurium")
+#       ), 
+#       na.rm = TRUE
+#     ),
+#     .groups = "drop"
+#   )
+# 
+# # View the result
+# print(tvla_verification_table)
 ################################################################################
-# 1. Define the criteria function to keep the code clean
-calculate_counts <- function(UniqueData) {
-  UniqueData %>%
-    summarise(
-      `Tested at TVLA` = sum(!is.na(TVLA_ID), na.rm = TRUE),
-      `Confirmed as per Criteria` = sum(
-        !is.na(TVLA_ID) & (
-          (Isolate == "E.coli" & VITEK_MS_Results == "Escherichia coli") |
-            (Isolate == "K.pneumoniae" & VITEK_MS_Results == "Klebsiella pneumoniae") |
-            (Isolate == "S.typhimurium" & VITEK_MS_Results != "S.typhimurium")
-        ), 
-        na.rm = TRUE
-      ),
-      .groups = "drop"
-    )
-}
-
-# 2. Filter base data for target isolates
-filtered_data <- UniqueData %>%
-  filter(Isolate %in% c("E.coli", "K.pneumoniae", "S.typhimurium"))
-
-# 3. Generate Aggregates by Region
-region_agg <- filtered_data %>%
-  group_by(REGION, Isolate) %>%
-  calculate_counts()
-
-# 4. Generate Aggregates by Season
-season_agg <- filtered_data %>%
-  group_by(SEASON, Isolate) %>%
-  calculate_counts()
-
-# 5. Generate Aggregates by Origin
-origin_agg <- filtered_data %>%
-  group_by(ORIGIN_OF_SAMPLE, Isolate) %>%
-  calculate_counts()
-
-# Print the Regional Table (The "Kilimanjaro" example)
-print("--- SUMMARY BY REGION ---")
-print(region_agg)
-
-# Print the Seasonal Table
-print("--- SUMMARY BY SEASON ---")
-print(season_agg)
-
-# Print the Origin Table
-print("--- SUMMARY BY ORIGIN ---")
-print(origin_agg)
+# # 1. Define the criteria function to keep the code clean
+# calculate_counts <- function(UniqueData) {
+#   UniqueData %>%
+#     summarise(
+#       `Tested at TVLA` = sum(!is.na(TVLA_ID), na.rm = TRUE),
+#       `Confirmed as per Criteria` = sum(
+#         !is.na(TVLA_ID) & (
+#           (Isolate == "E.coli" & VITEK_MS_Results == "Escherichia coli") |
+#             (Isolate == "K.pneumoniae" & VITEK_MS_Results == "Klebsiella pneumoniae") |
+#             (Isolate == "S.typhimurium" & VITEK_MS_Results != "S.typhimurium")
+#         ), 
+#         na.rm = TRUE
+#       ),
+#       .groups = "drop"
+#     )
+# }
+# 
+# # 2. Filter base data for target isolates
+# filtered_data <- UniqueData %>%
+#   filter(Isolate %in% c("E.coli", "K.pneumoniae", "S.typhimurium"))
+# 
+# # 3. Generate Aggregates by Region
+# region_agg <- filtered_data %>%
+#   group_by(REGION, Isolate) %>%
+#   calculate_counts()
+# 
+# # 4. Generate Aggregates by Season
+# season_agg <- filtered_data %>%
+#   group_by(SEASON, Isolate) %>%
+#   calculate_counts()
+# 
+# # 5. Generate Aggregates by Origin
+# origin_agg <- filtered_data %>%
+#   group_by(ORIGIN_OF_SAMPLE, Isolate) %>%
+#   calculate_counts()
+# 
+# # Print the Regional Table (The "Kilimanjaro" example)
+# print("--- SUMMARY BY REGION ---")
+# print(region_agg)
+# 
+# # Print the Seasonal Table
+# print("--- SUMMARY BY SEASON ---")
+# print(season_agg)
+# 
+# # Print the Origin Table
+# print("--- SUMMARY BY ORIGIN ---")
+# print(origin_agg)
 ################################################################################
 ## MMJ from HERE down
 ## Calculating the Isolation rate (some of the isolates being grouped in "others")

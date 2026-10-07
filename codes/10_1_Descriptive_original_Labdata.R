@@ -60,80 +60,80 @@ calculate_prevalence <- function(data, target_var, value, group_vars = NULL, con
 
 joined_data <- read_csv("data/CLEANED_DATA/UniqueData.csv")
 spec(joined_data)
-
+names(joined_data)
 Descriptive_Lab <- joined_data%>%
   mutate(Results_ECO = case_when(
-    Isolate.x == "E.coli" ~ "1",
+    Isolate == "E.coli" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_KLEBP = case_when(
-    Isolate.x == "K.pneumoniae" ~ "1",
+    Isolate == "K.pneumoniae" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_SAM = case_when(
-    Isolate.x == "S.typhimurium" ~ "1",
+    Isolate == "S.typhimurium" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_Styphi = case_when(
-    Isolate.x == "S.typhi" ~ "1",
+    Isolate == "S.typhi" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_K.aerogenes = case_when(
-    Isolate.x == "K.aerogenes" ~ "1",
+    Isolate == "K.aerogenes" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_K.oxytoca = case_when(
-    Isolate.x == "K.oxytoca" ~ "1",
+    Isolate == "K.oxytoca" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_C.freundii = case_when(
-    Isolate.x == "C.freundii" ~ "1",
+    Isolate == "C.freundii" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_S.paratyphiA = case_when(
-    Isolate.x == "S.paratyphi A" ~ "1",
+    Isolate == "S.paratyphi A" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_P.aeruginosa = case_when(
-    Isolate.x == "P.aeruginosa" ~ "1",
+    Isolate == "P.aeruginosa" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_Y.enterocolitica = case_when(
-    Isolate.x == "Yersinia enterocolitica" ~ "1",
+    Isolate == "Yersinia enterocolitica" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_UnidentifiedGNR = case_when(
-    Isolate.x == "Unidentified GNR" ~ "1",
+    Isolate == "Unidentified GNR" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_Acinetobacterspp = case_when(
-    Isolate.x == "Acinetobacter spp" ~ "1",
+    Isolate == "Acinetobacter spp" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_A.hydrophilia = case_when(
-    Isolate.x == "Aeromonas hydrophilia" ~ "1",
+    Isolate == "Aeromonas hydrophilia" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_C.koseri = case_when(
-    Isolate.x == "C.koseri" ~ "1",
+    Isolate == "C.koseri" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_E.cloacae = case_when(
-    Isolate.x == "E.cloacae" ~ "1",
+    Isolate == "E.cloacae" ~ "1",
     TRUE ~ "0"))%>%
   mutate(Results_Shigellaspp = case_when(
-    Isolate.x == "Shigella spp" ~ "1",
+    Isolate == "Shigella spp" ~ "1",
     TRUE ~ "0"))%>%
-  select(INIKA_ID.x, Results_ECO, Results_KLEBP , Results_K.oxytoca, Results_K.aerogenes, 
+  select(INIKA_ID, Results_ECO, Results_KLEBP , Results_K.oxytoca, Results_K.aerogenes, 
          Results_Styphi, Results_SAM,Results_Shigellaspp,
          Results_E.cloacae,Results_C.koseri,Results_A.hydrophilia,Results_Acinetobacterspp,
          Results_UnidentifiedGNR,Results_Y.enterocolitica,Results_S.paratyphiA,
          Results_C.freundii,Results_P.aeruginosa,
-         REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x,
+         REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON,
   ) 
 
 UNIKDESC<-unique(Descriptive_Lab )
   # need to select for each Isolate separately
  DescriptECO1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_ECO, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_ECO, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptECO1_flagged <- DescriptECO1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptECO1_final <- DescriptECO1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_ECO)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -142,10 +142,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptECO1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -187,20 +187,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptKLEBP1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_KLEBP, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_KLEBP, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
 
  # Step 1: Count how many times each ID appears
  
  DescriptKLEBP1_flagged <- DescriptKLEBP1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptKLEBP1_final <- DescriptKLEBP1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_KLEBP)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -209,10 +209,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptKLEBP1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -255,20 +255,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptK.oxytoca1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_K.oxytoca, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_K.oxytoca, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
 
  # Step 1: Count how many times each ID appears
  
  DescriptK.oxytoca1_flagged <- DescriptK.oxytoca1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptK.oxytoca1_final <- DescriptK.oxytoca1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_K.oxytoca)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -277,10 +277,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptK.oxytoca1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -322,19 +322,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptK.aerogenes1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_K.aerogenes, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_K.aerogenes, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptK.aerogenes1_flagged <- DescriptK.aerogenes1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptK.aerogenes1_final <- DescriptK.aerogenes1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_K.aerogenes)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -343,10 +343,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptK.aerogenes1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -388,20 +388,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptSAM1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_SAM, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_SAM, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptSAM1_flagged <- DescriptSAM1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptSAM1_final <- DescriptSAM1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_SAM)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -410,10 +410,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptSAM1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -454,20 +454,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab)
  # need to select for each Isolate separately
  DescriptStyphi1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_Styphi, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_Styphi, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
 
  
  # Step 1: Count how many times each ID appears
  
  DescriptStyphi1_flagged <- DescriptStyphi1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptStyphi1_final <- DescriptStyphi1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_Styphi)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -476,10 +476,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptStyphi1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -519,19 +519,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptS.paratyphiA1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_S.paratyphiA, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_S.paratyphiA, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
 
  
  # Step 1: Count how many times each ID appears
  
  DescriptS.paratyphiA1_flagged <- DescriptS.paratyphiA1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptS.paratyphiA1_final <- DescriptS.paratyphiA1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_S.paratyphiA)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -540,10 +540,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptS.paratyphiA1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -583,20 +583,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptC.freundii1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_C.freundii, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_C.freundii, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptC.freundii1_flagged <- DescriptC.freundii1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptC.freundii1_final <- DescriptC.freundii1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_C.freundii)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -605,10 +605,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptC.freundii1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -648,20 +648,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptC.koseri1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_C.koseri, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_C.koseri, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptC.koseri1_flagged <- DescriptC.koseri1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptC.koseri1_final <- DescriptC.koseri1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_C.koseri)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -670,10 +670,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptC.koseri1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -713,19 +713,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptP.aeruginosa1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_P.aeruginosa, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_P.aeruginosa, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptP.aeruginosa1_flagged <- DescriptP.aeruginosa1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptP.aeruginosa1_final <- DescriptP.aeruginosa1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_P.aeruginosa)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -734,10 +734,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptP.aeruginosa1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -777,19 +777,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptShigellaspp1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_Shigellaspp, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_Shigellaspp, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptShigellaspp1_flagged <- DescriptShigellaspp1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptShigellaspp1_final <- DescriptShigellaspp1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_Shigellaspp)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -798,10 +798,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptShigellaspp1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -841,19 +841,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptY.enterocolitica1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_Y.enterocolitica, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_Y.enterocolitica, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
 
  
  # Step 1: Count how many times each ID appears
  
  DescriptY.enterocolitica1_flagged <- DescriptY.enterocolitica1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptY.enterocolitica1_final <- DescriptY.enterocolitica1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_Y.enterocolitica)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -862,10 +862,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptY.enterocolitica1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -904,19 +904,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptA.hydrophilia1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_A.hydrophilia, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_A.hydrophilia, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptA.hydrophilia1_flagged <- DescriptA.hydrophilia1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptA.hydrophilia1_final <- DescriptA.hydrophilia1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_A.hydrophilia)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -925,10 +925,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptA.hydrophilia1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -967,19 +967,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptAcinetobacterspp1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_Acinetobacterspp, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_Acinetobacterspp, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptAcinetobacterspp1_flagged <- DescriptAcinetobacterspp1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptAcinetobacterspp1_final <- DescriptAcinetobacterspp1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_Acinetobacterspp)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -988,10 +988,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptAcinetobacterspp1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -1030,20 +1030,20 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptE.cloacae1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_E.cloacae, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_E.cloacae, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
  
  
  # Step 1: Count how many times each ID appears
  
  DescriptE.cloacae1_flagged <- DescriptE.cloacae1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptE.cloacae1_final <- DescriptE.cloacae1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_E.cloacae)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -1052,10 +1052,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptE.cloacae1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -1094,19 +1094,19 @@ UNIKDESC<-unique(Descriptive_Lab )
  UNIKDESC<-unique(Descriptive_Lab )
  # need to select for each Isolate separately
  DescriptUnidentifiedGNR1<-Descriptive_Lab%>% 
-   select(INIKA_ID.x, Results_UnidentifiedGNR, 
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+   select(INIKA_ID, Results_UnidentifiedGNR, 
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  
 
  # Step 1: Count how many times each ID appears
  
  DescriptUnidentifiedGNR1_flagged <- DescriptUnidentifiedGNR1 %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    mutate(ID_repeat_count = n()) %>%
    ungroup()
  # Step 2: Create a filtered version that keeps only one row per ID based on your logic
  DescriptUnidentifiedGNR1_final <- DescriptUnidentifiedGNR1_flagged %>%
-   group_by(INIKA_ID.x) %>%
+   group_by(INIKA_ID) %>%
    arrange(desc(Results_UnidentifiedGNR)) %>%  # Prioritize "1" over "0"
    slice_head(n = 1) %>%           # Keep only the first row per ID
    ungroup()
@@ -1115,10 +1115,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  unique_DATA1 <- DescriptUnidentifiedGNR1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -1165,8 +1165,8 @@ UNIKDESC<-unique(Descriptive_Lab )
  # !!! IMPORTANT: REPLACE THIS SYNTHETIC DATA SETUP WITH YOUR DATA !!!
  # ====================================================================
  # Assuming 'joined_data' is your source data frame containing:
- # TVLA_ID, Isolate.x, VITEK_MS_Results, ESBL, REGION.x, DISTRICT.x, 
- # ORIGIN_OF_SAMPLE.x, and SEASON.x.
+ # TVLA_ID, Isolate, VITEK_MS_Results, ESBL, REGION, DISTRICT, 
+ # ORIGIN_OF_SAMPLE, and SEASON.
  
  # --- 1. Custom Function to Calculate Prevalence and 95% CI ---
  
@@ -1199,25 +1199,25 @@ UNIKDESC<-unique(Descriptive_Lab )
  Denominator_Data <- joined_data %>%
    filter(VITEK_MS_Results == "Escherichia coli") %>%
    # Select grouping variables and TVLA_ID
-   select(TVLA_ID, REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x) %>%
+   select(TVLA_ID, REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON) %>%
    # Deduplicate to count only unique isolates
    group_by(TVLA_ID) %>%
    slice_head(n = 1) %>% 
    ungroup() %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE
    )
  
  # 2.2. Define the Numerator Population
- # Numerator: Isolate.x in (E.coli, K.pneumoniae) AND VITEK_MS_Results is E. coli AND ESBL == 1.
+ # Numerator: Isolate in (E.coli, K.pneumoniae) AND VITEK_MS_Results is E. coli AND ESBL == 1.
  numerator_acceptable_isolates <- c("E.coli", "K.pneumoniae") 
  
  Numerator_Data <- joined_data %>%
    filter(
-     Isolate.x %in% numerator_acceptable_isolates & 
+     Isolate %in% numerator_acceptable_isolates & 
        VITEK_MS_Results == "Escherichia coli" &       
        as.numeric(ESBL) == 1                          
    ) %>%
@@ -1300,14 +1300,14 @@ UNIKDESC<-unique(Descriptive_Lab )
      TRUE ~ "0"))%>%
 
    select(TVLA_ID,ESBL_Selection, ESBL, Results_E.coli, Results_K.pneumoniae,
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x,
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON,
    )
 
  UNIKESCR<-unique(ESCR_Descriptive_Lab )
  # need to select for each Isolate separately
  ESCR_E.coli1<-ESCR_Descriptive_Lab%>%
    select(TVLA_ID, Results_E.coli, TVLA_ID,ESBL_Selection, ESBL,
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  # Note we are getting duplicates, need to remove negative results
 
 
@@ -1329,10 +1329,10 @@ UNIKDESC<-unique(Descriptive_Lab )
 
  ESCR_unique_DATA1 <- ESCR_DescriptiveE.coli1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
 
 
@@ -1379,14 +1379,14 @@ UNIKDESC<-unique(Descriptive_Lab )
      TRUE ~ "0"))%>%
    
    select(TVLA_ID,ESBL_Selection, ESBL, Results_E.coli, Results_K.pneumoniae,
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x,
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON,
    ) 
  
  UNIKESCR<-unique(ESCR_Descriptive_Lab )
  # need to select for each Isolate separately
  ESCR_K.pneumoniae1<-ESCR_Descriptive_Lab%>% 
    select(TVLA_ID, Results_K.pneumoniae, TVLA_ID,ESBL_Selection, ESBL,
-          REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x)
+          REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON)
  # Note we are getting duplicates, need to remove negative results
  
  
@@ -1408,10 +1408,10 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  ESCR_unique_DATA1 <- ESCR_DescriptiveK.pneumoniae1_final %>%
    rename(
-     REGION = REGION.x,
-     DISTRICT = DISTRICT.x,
-     SEASON = SEASON.x,
-     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE.x
+     REGION = REGION,
+     DISTRICT = DISTRICT,
+     SEASON = SEASON,
+     ORIGIN_OF_SAMPLE= ORIGIN_OF_SAMPLE
    )
  
  
@@ -1447,13 +1447,13 @@ UNIKDESC<-unique(Descriptive_Lab )
  write_tsv(prevalence_table_K.pneumoniae1, "Results/prevalence_table_K.pneumoniae1.tsv")
 ######################################################################## 
  # Prevalence of ESBL(ESCR) E.coli
- group_vars_list <- c("REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE.x", "DISTRICT.x")
+ group_vars_list <- c("REGION", "SEASON", "ORIGIN_OF_SAMPLE", "DISTRICT")
  
  # --- Step 1: Prepare the Base Data (Filter E. coli AND K. pneumoniae isolates) ---
  Ecoli_Kpneumoniae_data <- joined_data %>%
-   # Filter based on the OR condition in Isolate.x AND the VITEK condition
+   # Filter based on the OR condition in Isolate AND the VITEK condition
    filter(
-     Isolate.x %in% c("E.coli", "K.pneumoniae") &
+     Isolate %in% c("E.coli", "K.pneumoniae") &
        VITEK_MS_Results == "Escherichia coli"
    ) %>%
    # Use TVLA_ID to ensure each unique isolate is counted only once
@@ -1505,13 +1505,13 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  ## ESBL prevalence of E.coli with 95%CI
  # Define the list of grouping variables
- group_vars_list <- c("REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE.x", "DISTRICT.x")
+ group_vars_list <- c("REGION", "SEASON", "ORIGIN_OF_SAMPLE", "DISTRICT")
  
  # --- Step 1: Prepare the Base Data (Filter E. coli AND K. pneumoniae isolates) ---
  Ecoli_Kpneumoniae_data <- joined_data %>%
-   # Filter based on the OR condition in Isolate.x AND the VITEK condition
+   # Filter based on the OR condition in Isolate AND the VITEK condition
    filter(
-     Isolate.x %in% c("E.coli", "K.pneumoniae") &
+     Isolate %in% c("E.coli", "K.pneumoniae") &
        VITEK_MS_Results == "Escherichia coli"
    ) %>%
    # Use TVLA_ID to ensure each unique isolate is counted only once
@@ -1602,12 +1602,12 @@ UNIKDESC<-unique(Descriptive_Lab )
  # Define the Denominator Population 
  Denominator_Data <- joined_data %>%
    filter(VITEK_MS_Results == "Escherichia coli") %>%
-   select(TVLA_ID, REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x) %>%
+   select(TVLA_ID, REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON) %>%
    group_by(TVLA_ID) %>%
    slice_head(n = 1) %>%
    ungroup() %>%
    rename(
-     REGION = REGION.x, DISTRICT = DISTRICT.x, SEASON = SEASON.x, ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE.x
+     REGION = REGION, DISTRICT = DISTRICT, SEASON = SEASON, ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE
    )
  
  # Define the Numerator Population (ESBL Positive)
@@ -1615,7 +1615,7 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  Numerator_Data <- joined_data %>%
    filter(
-     Isolate.x %in% numerator_acceptable_isolates &
+     Isolate %in% numerator_acceptable_isolates &
        VITEK_MS_Results == "Escherichia coli" &
        as.numeric(ESBL) == 1
    ) %>%
@@ -1790,12 +1790,12 @@ UNIKDESC<-unique(Descriptive_Lab )
  # Define the Denominator Population 
  Denominator_Data <- joined_data %>%
    filter(VITEK_MS_Results == "Klebsiella pneumoniae") %>%
-   select(TVLA_ID, REGION.x, DISTRICT.x, ORIGIN_OF_SAMPLE.x, SEASON.x) %>%
+   select(TVLA_ID, REGION, DISTRICT, ORIGIN_OF_SAMPLE, SEASON) %>%
    group_by(TVLA_ID) %>%
    slice_head(n = 1) %>%
    ungroup() %>%
    rename(
-     REGION = REGION.x, DISTRICT = DISTRICT.x, SEASON = SEASON.x, ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE.x
+     REGION = REGION, DISTRICT = DISTRICT, SEASON = SEASON, ORIGIN_OF_SAMPLE = ORIGIN_OF_SAMPLE
    )
  
  # Define the Numerator Population (ESBL Positive)
@@ -1803,7 +1803,7 @@ UNIKDESC<-unique(Descriptive_Lab )
  
  Numerator_Data <- joined_data %>%
    filter(
-     Isolate.x %in% numerator_acceptable_isolates &
+     Isolate %in% numerator_acceptable_isolates &
        VITEK_MS_Results == "Klebsiella pneumoniae" &
        as.numeric(ESBL) == 1
    ) %>%
@@ -1951,13 +1951,13 @@ UNIKDESC<-unique(Descriptive_Lab )
 ################################################################################  
   ## ESBL prevalence of K.pneumoniae
   
- group_vars_list <- c("REGION.x", "SEASON.x", "ORIGIN_OF_SAMPLE.x", "DISTRICT.x")
+ group_vars_list <- c("REGION", "SEASON", "ORIGIN_OF_SAMPLE", "DISTRICT")
  
  # --- Step 1: Prepare the Base Data (Filter E. coli AND K. pneumoniae isolates) ---
  Ecoli_Kpneumoniae_data <- joined_data %>%
-   # Filter based on the OR condition in Isolate.x AND the VITEK condition
+   # Filter based on the OR condition in Isolate AND the VITEK condition
    filter(
-     Isolate.x %in% c("E.coli", "K.pneumoniae") &
+     Isolate %in% c("E.coli", "K.pneumoniae") &
        VITEK_MS_Results == "Klebsiella pneumoniae"
    ) %>%
    # Use TVLA_ID to ensure each unique isolate is counted only once
@@ -2039,7 +2039,7 @@ UNIKDESC<-unique(Descriptive_Lab )
     # Count the unique TVLA_IDs where both columns match for the specific organism
     N_Concordant <- data %>%
       filter(
-        Isolate.x == isolate_name & VITEK_MS_Results == vitek_name
+        Isolate == isolate_name & VITEK_MS_Results == vitek_name
       ) %>%
       distinct(TVLA_ID) %>%
       nrow()
@@ -2083,3 +2083,174 @@ UNIKDESC<-unique(Descriptive_Lab )
   write.csv(Separate_Concordance_Summary, "Results/Separate_Concordance_Summary.csv")
   write_tsv(Separate_Concordance_Summary, "Results/Separate_Concordance_Summary.tsv")
 #####################################################################################
+# Calculating the Isolation rate per stratum
+  # Load required libraries
+  library(dplyr)
+  library(tidyr)
+  library(stringr)
+  library(readr)
+  library(flextable)
+  library(officer)
+  
+  # --- Standardize Isolate Categorization & Pre-processing ---
+  
+  isolates_processed <- joined_data %>%
+    mutate(
+      DISTRICT = if_else(DISTRICT == "Ilemala", "Ilemela", DISTRICT),
+      Isolate_Group = case_when(
+        Isolate == "E.coli" ~ "E. coli",
+        Isolate == "K.pneumoniae" ~ "K. pneumoniae",
+        Isolate == "K.aerogenes" ~ "K. aerogenes",
+        Isolate == "K.oxytoca" ~ "K. oxytoca",
+        Isolate == "S.typhimurium" ~ "S. typhimurium",
+        Isolate == "S.typhi" ~ "S. typhi",
+        Isolate == "S.paratyphi A" ~ "S. paratyphi A",
+        TRUE ~ "Others"
+      )
+    )
+  
+  # Dynamically extract species under "Others" for footnote
+  others_species <- joined_data %>%
+    filter(!Isolate %in% c("E.coli", "K.pneumoniae", "K.aerogenes", "K.oxytoca", 
+                           "S.typhimurium", "S.typhi", "S.paratyphi A")) %>%
+    pull(Isolate) %>%
+    unique() %>%
+    na.omit() %>%
+    sort()
+  
+  others_footnote_text <- paste0("Others includes: ", paste(others_species, collapse = ", "), ".")
+  
+  TOTAL_N <- n_distinct(joined_data$INIKA_ID, na.rm = TRUE)
+  
+  # --- Helper Functions ---
+  
+  isolate_order <- c("E. coli", "K. pneumoniae", "K. aerogenes", "K. oxytoca", 
+                     "S. typhimurium", "S. typhi", "S. paratyphi A", "Others")
+  
+  format_n_percent <- function(n, N) {
+    pct <- round((n / N) * 100, 1)
+    pct_str <- sprintf("%.1f", pct)
+    pct_str <- sub("\\.0$", "", pct_str)
+    paste0(n, " (", pct_str, "%)")
+  }
+  
+  calc_group_summary <- function(data, group_col, N_denom) {
+    data %>%
+      group_by(Isolate_Group, !!sym(group_col)) %>%
+      summarise(n = n_distinct(INIKA_ID, na.rm = TRUE), .groups = "drop") %>%
+      mutate(formatted = format_n_percent(n, N_denom)) %>%
+      pivot_wider(id_cols = Isolate_Group, names_from = !!sym(group_col), values_from = formatted, values_fill = "0 (0)")
+  }
+  
+  # ---  Compute Columns ---
+  
+  overall_df <- isolates_processed %>%
+    group_by(Isolate_Group) %>%
+    summarise(n = n_distinct(INIKA_ID, na.rm = TRUE), .groups = "drop") %>%
+    mutate(Overall = format_n_percent(n, TOTAL_N)) %>%
+    select(Isolate_Group, Overall)
+  
+  region_df  <- calc_group_summary(isolates_processed, "REGION", TOTAL_N)
+  season_df  <- calc_group_summary(isolates_processed, "SEASON", TOTAL_N)
+  origin_df  <- calc_group_summary(isolates_processed, "ORIGIN_OF_SAMPLE", TOTAL_N)
+  
+  # Order districts: Kilimanjaro districts alphabetically, then Mwanza districts alphabetically
+  district_region_map <- isolates_processed %>%
+    select(DISTRICT, REGION) %>%
+    distinct() %>%
+    mutate(
+      Reg_Rank = case_when(
+        grepl("Kilimanjaro", REGION, ignore.case = TRUE) ~ 1,
+        grepl("Mwanza", REGION, ignore.case = TRUE) ~ 2,
+        TRUE ~ 3
+      )
+    ) %>%
+    arrange(Reg_Rank, DISTRICT)
+  
+  ordered_districts <- district_region_map$DISTRICT
+  
+  district_df <- calc_group_summary(isolates_processed, "DISTRICT", TOTAL_N) %>%
+    select(Isolate_Group, all_of(intersect(ordered_districts, names(.))))
+  
+  # --- Combine into Summary Table ---
+  
+  prevalence_summary_table <- tibble(Isolate_Group = isolate_order) %>%
+    left_join(overall_df, by = "Isolate_Group") %>%
+    left_join(region_df, by = "Isolate_Group") %>%
+    left_join(season_df, by = "Isolate_Group") %>%
+    left_join(origin_df, by = "Isolate_Group") %>%
+    left_join(district_df, by = "Isolate_Group") %>%
+    mutate(across(everything(), ~ replace_na(.x, "0 (0)")))
+  
+  # Export raw data formats
+  if (!dir.exists("Results")) dir.create("Results", recursive = TRUE)
+  
+  write_csv(prevalence_summary_table, file = "Results/Isolate_Prevalence_Summary.csv")
+  write_tsv(prevalence_summary_table, file = "Results/Isolate_Prevalence_Summary.tsv")
+  saveRDS(prevalence_summary_table, file = "Results/Isolate_Prevalence_Summary.rds")
+  
+  # --- Format Word Flextable ---
+  
+  border_line <- fp_border(color = "black", width = 1)
+  header_line <- fp_border(color = "black", width = 0.5)
+  
+  ft_landscape <- flextable(prevalence_summary_table) %>%
+    font(fontname = "Arial", part = "all") %>%
+    fontsize(size = 8, part = "header") %>%
+    fontsize(size = 8, part = "body") %>%
+    italic(j = "Isolate_Group", part = "body") %>%
+    bold(part = "header") %>%
+    align(j = 1, align = "left", part = "all") %>%
+    align(j = 2:ncol(prevalence_summary_table), align = "center", part = "all") %>%
+    set_header_labels(Isolate_Group = "Bacterial Isolate") %>%
+    # Compact padding to guarantee single-page fitting
+    padding(padding.top = 2.5, padding.bottom = 2.5, padding.left = 3, padding.right = 3, part = "all") %>%
+    border_remove() %>%
+    hline_top(border = border_line, part = "header") %>%
+    hline_bottom(border = header_line, part = "header") %>%
+    hline_bottom(border = border_line, part = "body") %>%
+    autofit() %>%
+    add_footer_lines(values = paste0(
+      "Data presented as frequency and percentage, n (%). Total study population N = ", TOTAL_N, ". ",
+      others_footnote_text
+    )) %>%
+    fontsize(size = 7.5, part = "footer")
+  
+  # --- Export Landscape Word Doc with Correct Officer Margins ---
+  
+  # Define 0.5 inch margins using page_mar()
+  landscape_margins <- page_mar(
+    top = 0.5,
+    bottom = 0.5,
+    left = 0.5,
+    right = 0.5,
+    header = 0,
+    footer = 0,
+    gutter = 0
+  )
+  
+  # Define full landscape section specification
+  sec_landscape <- prop_section(
+    page_size = page_size(orient = "landscape"),
+    page_margins = landscape_margins,
+    type = "continuous"
+  )
+  
+  # Build document
+  doc_landscape <- read_docx()
+  
+  caption_p <- fpar(
+    ftext("Table 2 ", prop = fp_text(font.family = "Arial", font.size = 9.5, bold = TRUE)),
+    ftext(paste0("Prevalence of bacterial isolates overall and stratified by region, season, sample origin, and district (N = ", TOTAL_N, ")"), 
+          prop = fp_text(font.family = "Arial", font.size = 9.5))
+  )
+  
+  doc_landscape <- doc_landscape %>%
+    body_add_fpar(caption_p) %>%
+    body_add_flextable(ft_landscape) %>%
+    body_end_block_section(block_section(sec_landscape))
+  
+  print(doc_landscape, target = "Results/Isolate_Prevalence_Summary_Landscape.docx")
+  
+  cat("Landscape table successfully saved to 'Results/Isolate_Prevalence_Summary_Landscape.docx'.\n")
+  

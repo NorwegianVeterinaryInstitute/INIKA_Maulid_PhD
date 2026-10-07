@@ -11,11 +11,12 @@ library(tidyverse)  # for data manipulation and visualization
 library(readxl)     # for reading Excel files)
 
 ## Importing the VITEK RESULTS
+
 AST_ISOLATES <- readRDS("data/CLEANED_DATA/FINAL_AST_RESULTS.rds")
 
 ## Select relevant columns
 AST_ISOLATES <- AST_ISOLATES %>%
-  select(Isolate_ID, TVLA_ID, VITEK_MS_Results, ESC, ESBL_Selection,ESBL_Presumptivefinal,Isolate,Isolatnr,Maldi_Tof_25_2_26_tmf)
+  select(Isolate_ID, TVLA_ID, VITEK_MS_Results, ESC, ESBL_Selection,ESBL_Presumptivefinal,Isolate) # Isolatnr, ,Maldi_Tof_25_2_26_tmf
 
 # AST_ISOLATES <- AST_ISOLATES %>%
 #   select(Isolate_ID, TVLA_ID, VITEK_MS_Results, ESC, ESBL)
@@ -29,9 +30,6 @@ VITEK_MS_SELECTED <- readRDS ("data/CLEANED_DATA/FINAL_VITEK_MS_SELECTED-2025-10
 VITEK_MS_SELECTED<-VITEK_MS_SELECTED%>%
   mutate(INIKA_ID =  sub("_.*", "", Isolate_ID))
 
-
-
- 
 
 # Note Isolate_ID is not always correct- need to be corrected above! MN
 ## Join the VITEK_MS_SELECTED with AST_ISOLATES
